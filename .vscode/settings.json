@@ -1,0 +1,4 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+    "zig.zls.path": "/home/yang/.vscode-server/data/User/globalStorage/ziglang.vscode-zig/zls_install/zls",
+}
