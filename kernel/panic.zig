@@ -6,13 +6,6 @@ const EXIT_RESET: u32 = 0x7777;
 
 pub fn panic(comptime fmt: []const u8, args: anytype) noreturn {
     console.logger.err(fmt, args);
-    
-    asm volatile (
-        \\ sw 0(%[addr]), %[code]
-        :
-        : [code] "r" (EXIT_FAILURE),
-          [addr] "r" (0x100000),
-    );
 
     while (true) {
         asm volatile ("wfi");
