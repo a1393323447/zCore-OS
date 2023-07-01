@@ -20,10 +20,12 @@ check:
 
 # build zcore-os.bin in release mode
 build:
+	zig build user
 	zig build img
 
 # build zcore-os.bin in debug mode
 build-debug:
+	zig build user -Ddebug
 	zig build img -Ddebug
 	zig build -Ddebug
 
