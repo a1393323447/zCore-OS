@@ -23,7 +23,6 @@ const kernel_linker_script_path = "kernel/linker.ld";
 const kernel_asm_files = [_][]const u8{
     "kernel/entry.S",
     "kernel/trap/trap.S",
-    "kernel/task/switch.S",
     "kernel/link_app.S",
 };
 
