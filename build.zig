@@ -4,6 +4,7 @@ const CodeModel = std.builtin.CodeModel;
 
 const Step = std.build.Step;
 const Module = std.build.Module;
+const LazyPath = std.build.LazyPath;
 const FileSource = std.build.FileSource;
 const TestOptions = std.build.TestOptions;
 const CompileStep = std.build.CompileStep;
@@ -113,7 +114,7 @@ fn config_compile_step(step: *CompileStep, comptime linker_script_path: ?[]const
     step.code_model = CodeModel.medium;
 
     for (asm_file_paths) |path| {
-        step.addAssemblyFile(path);
+        step.addAssemblyFile(LazyPath.relative(path));
     }
 
     if (linker_script_path) |path| {
