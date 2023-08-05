@@ -4,6 +4,7 @@ const CodeModel = std.builtin.CodeModel;
 
 const Step = std.build.Step;
 const Module = std.build.Module;
+const LazyPath = std.build.LazyPath;
 const FileSource = std.build.FileSource;
 const TestOptions = std.build.TestOptions;
 const CompileStep = std.build.CompileStep;
@@ -36,6 +37,7 @@ const riscv64 = CrossTarget.fromTarget(Target{
 
 // for debug option
 var is_debug: bool = false;
+var input_app_name: []const u8 = "";
 
 pub inline fn optimize(debug: bool) Mode {
     return if (debug) Mode.Debug else Mode.ReleaseSafe;
@@ -54,6 +56,7 @@ pub fn build(b: *std.build.Builder) void {
 
 fn init_options(b: *std.build.Builder) void {
     is_debug = b.option(bool, "debug", "Enable debug mode") orelse false;
+    input_app_name = b.option([]const u8, "appName", "App name") orelse "";
 }
 
 fn create_shared_module(b: *std.build.Builder) *Module {
@@ -133,7 +136,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, comptime app_name: []c
 
     config_compile_step(bin_main, null, &asm_files);
 
-    bin_main.setMainPkgPath("user");
+    bin_main.main_pkg_path = LazyPath.relative("user");
     bin_main.addModule("shared", shared);
 
     const user_app = b.addExecutable(std.build.ExecutableOptions{
@@ -141,7 +144,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, comptime app_name: []c
         .root_source_file = std.build.FileSource.relative("user/bin/" ++ app_name ++ ".zig"),
     });
 
-    user_app.setMainPkgPath("user");
+    user_app.main_pkg_path = LazyPath.relative("user");
     user_app.addModule("shared", shared);
     user_app.addObject(bin_main);
 
@@ -171,7 +174,8 @@ fn config_compile_step(step: *CompileStep, comptime linker_script_path: ?[]const
     step.code_model = CodeModel.medium;
 
     for (asm_file_paths) |path| {
-        step.addAssemblyFile(path);
+        const lpath = LazyPath.relative(path);
+        step.addAssemblyFile(lpath);
     }
 
     if (linker_script_path) |path| {
