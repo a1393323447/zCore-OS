@@ -31,6 +31,6 @@ pub const SpinLock = struct {
     }
 
     pub fn holding(self: *Self) bool {
-        return self.locked.load(atomic.Ordering.Monotonic);
+        return self.locked.load(atomic.Ordering.Unordered);
     }
 };
