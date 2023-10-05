@@ -1,7 +1,9 @@
 const console = @import("console.zig");
-const riscv = @import("riscv/lib.zig");
-const batch = @import("batch.zig");
-const trap = @import("trap/trap.zig");
+const loader = @import("loader.zig");
+const panic = @import("panic.zig");
+const trap = @import("trap/lib.zig");
+const task = @import("task/lib.zig");
+const timer = @import("timer.zig");
 
 export fn _kmain() noreturn {
     clear_bss();
@@ -9,9 +11,13 @@ export fn _kmain() noreturn {
     print_logo();
 
     trap.init();
-    batch.init();
+    task.init();
 
-    batch.run_next_app();
+    loader.load_apps();
+    trap.enable_timer_interrupt();
+    task.run_first_task();
+
+    panic.panic("Unreachable in _kmain!", .{});
 }
 
 fn print_logo() void {
