@@ -1,5 +1,6 @@
 const panic = @import("../panic.zig");
-const batch = @import("../batch.zig");
+const task = @import("../task/lib.zig");
+const loader = @import("../loader.zig");
 const riscv = @import("../riscv/lib.zig");
 const regs = riscv.regs;
 const Sstatus = riscv.regs.sstatus.Sstatus;
@@ -10,6 +11,10 @@ const std = @import("std");
 extern fn __alltraps() callconv(.Naked) void;
 pub fn init() void {
     regs.stvec.write(@intFromPtr(&__alltraps), regs.stvec.TrapMode.Diret);
+}
+
+pub fn enable_timer_interrupt() void {
+    regs.sie.set_timer();
 }
 
 comptime {
@@ -35,7 +40,7 @@ pub const TrapContext = extern struct {
     pub fn app_init_context(entry: usize, sp: usize) Self {
         var sstatus = regs.sstatus.read();
         regs.sstatus.set_spp(regs.sstatus.SPP.User);
-        var ctx = Self{
+        var ctx = Self {
             .x = std.mem.zeroes([32]usize),
             .sstatus = sstatus,
             .sepc = entry,
@@ -62,12 +67,15 @@ pub export fn trap_handler(ctx: *TrapContext) *TrapContext {
                 ctx.x[10] = @intCast(code);
             },
             .StoreFault, .StorePageFault => {
-                console.logger.warn("[kernel] PageFault in application, kernel killed it.", .{});
-                batch.run_next_app();
+                console.logger.warn(
+                    "[kernel] PageFault in application, bad memory addr = 0x{x}, bad instruction addr = 0x{x}, core dumped.", 
+                    .{ stval, ctx.sepc }
+                );
+                task.exit_current_and_run_next();
             },
             .IllegalInstruction => {
                 console.logger.warn("[kernel] IllegalInstruction in application, kernel killed it.", .{});
-                batch.run_next_app();
+                task.exit_current_and_run_next();
             },
             else => {
                 panic.panic("Unsupported trap {}, stval = {x} !", .{
@@ -76,11 +84,16 @@ pub export fn trap_handler(ctx: *TrapContext) *TrapContext {
                 });
             },
         },
-        else => {
-            panic.panic("Unsupported trap {}, stval = {x} !", .{
-                scause.cause(),
-                stval,
-            });
+        .interrupt => |interrupt| switch(interrupt) {
+            .SupervisorTimer => {
+                task.suspend_current_and_run_next();
+            },
+            else => {
+                panic.panic("Unsupported trap {}, stval = {x} !", .{
+                    scause.cause(),
+                    stval,
+                });
+            },
         },
     }
 
