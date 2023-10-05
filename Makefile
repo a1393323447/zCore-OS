@@ -1,4 +1,5 @@
 GDB = gdb-multiarch
+PYTHON = python3
 REMOTE = localhost:1234
 
 BIOS_PATH = boot/rustsbi-qemu.bin
@@ -20,12 +21,13 @@ check:
 
 # build zcore-os.bin in release mode
 build:
-	zig build user
+	$(PYTHON) ./user/build.py
 	zig build img
 
 # build zcore-os.bin in debug mode
+# `zig build -Ddebug` is for building the excutable format file to debug
 build-debug:
-	zig build user -Ddebug
+	$(PYTHON) user/build.py -Ddebug
 	zig build img -Ddebug
 	zig build -Ddebug
 

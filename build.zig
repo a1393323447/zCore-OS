@@ -37,7 +37,13 @@ const riscv64 = CrossTarget.fromTarget(Target{
 
 // for debug option
 var is_debug: bool = false;
-var input_app_name: []const u8 = "";
+var input_app_name: ?[]const u8 = null;
+
+var string_buffer: [512]u8 = undefined;
+fn format(comptime fmt: []const u8, args: anytype) []u8 {
+    return std.fmt.bufPrint(&string_buffer, fmt, args) 
+        catch |err| std.debug.panic("Error occured while formatting string: {}\n", .{err});
+}
 
 pub inline fn optimize(debug: bool) Mode {
     return if (debug) Mode.Debug else Mode.ReleaseSafe;
@@ -50,13 +56,15 @@ pub fn build(b: *std.build.Builder) void {
     const shared = create_shared_module(b);
     // zig build check: for checking syntax
     set_checking(b, shared);
+    // zig build -DappName=APP_NAME
+    set_build_user_app(b, shared);
     // zig build img: for building zcore-os.bin
     set_build_img(b, shared);
 }
 
 fn init_options(b: *std.build.Builder) void {
     is_debug = b.option(bool, "debug", "Enable debug mode") orelse false;
-    input_app_name = b.option([]const u8, "appName", "App name") orelse "";
+    input_app_name = b.option([]const u8, "appName", "App name");
 }
 
 fn create_shared_module(b: *std.build.Builder) *Module {
@@ -68,10 +76,7 @@ fn create_shared_module(b: *std.build.Builder) *Module {
 }
 
 fn set_build_img(b: *std.build.Builder, shared: *Module) void {
-    const build_user_apps_step = build_user_apps(b, shared);
-
     const build_kernel_step = build_kernel(b, shared);
-    build_kernel_step.dependOn(build_user_apps_step);
 
     const build_img = b.step("img", "Build zcore-os.bin");
     build_img.dependOn(build_kernel_step);
@@ -109,22 +114,16 @@ fn build_kernel(b: *std.build.Builder, shared: *Module) *Step {
     return emit_bin_file_step;
 }
 
-fn build_user_apps(b: *std.build.Builder, shared: *Module) *Step {
-    const build_apps_step = b.step("user", "Build all user apps in dir 'user/bin/' .");
-    const app_names = comptime [_][]const u8{
-        "hello_world",
-        "store_fault",
-        "power",
-    };
-    inline for (app_names) |app_name| {
-        const build_app_step = build_user_app(b, shared, app_name);
-        build_apps_step.dependOn(build_app_step);
+fn set_build_user_app(b: *std.build.Builder, shared: *Module) void {
+    const build_app_step = b.step("app", "Build user app `AppName`. ie. zig build app -DAppName=foo");
+    if (input_app_name) |name| {
+        const building_step = build_user_app(b, shared, name);
+        build_app_step.dependOn(building_step);
+        std.debug.print("Building app {s}\n", .{name});
     }
-
-    return build_apps_step;
 }
 
-fn build_user_app(b: *std.build.Builder, shared: *Module, comptime app_name: []const u8) *Step {
+fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) *Step {
     const asm_files = [_][]const u8{};
 
     const bin_main = b.addObject(.{
@@ -141,7 +140,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, comptime app_name: []c
 
     const user_app = b.addExecutable(std.build.ExecutableOptions{
         .name = app_name,
-        .root_source_file = std.build.FileSource.relative("user/bin/" ++ app_name ++ ".zig"),
+        .root_source_file = std.build.FileSource.relative(format("user/bin/{s}.zig", .{app_name})),
     });
 
     user_app.main_pkg_path = LazyPath.relative("user");
@@ -153,7 +152,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, comptime app_name: []c
     b.installArtifact(user_app);
 
     // emit bin file
-    const emit_bin_file_step = emit_bin(b, user_app, app_name ++ ".bin");
+    const emit_bin_file_step = emit_bin(b, user_app, format("{s}.bin", .{app_name}));
 
     return emit_bin_file_step;
 }
@@ -184,7 +183,7 @@ fn config_compile_step(step: *CompileStep, comptime linker_script_path: ?[]const
     }
 }
 
-fn emit_bin(b: *std.build.Builder, source_exe: *CompileStep, comptime install_name: []const u8) *Step {
+fn emit_bin(b: *std.build.Builder, source_exe: *CompileStep, install_name: []const u8) *Step {
     const objcopy = source_exe.addObjCopy(std.build.ObjCopyStep.Options{
         .format = std.build.ObjCopyStep.RawFormat.bin,
     });
