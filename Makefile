@@ -21,15 +21,14 @@ check:
 
 # build zcore-os.bin in release mode
 build:
-	$(PYTHON) ./user/build.py
-	zig build img
+	$(PYTHON) user/build.py
+	$(PYTHON) kernel/build.py
 
 # build zcore-os.bin in debug mode
 # `zig build -Ddebug` is for building the excutable format file to debug
 build-debug:
-	$(PYTHON) user/build.py -Ddebug
-	zig build img -Ddebug
-	zig build -Ddebug
+	$(PYTHON) user/build.py debug
+	$(PYTHON) kernel/build.py debug
 
 # run zcore os in qemu
 run: build
