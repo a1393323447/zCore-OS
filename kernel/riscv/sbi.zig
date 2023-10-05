@@ -1,3 +1,6 @@
+const panic = @import("../panic.zig");
+const console = @import("../console.zig");
+
 const SBI_SET_TIMER: usize = 0;
 const SBI_CONSOLE_PUTCHAR: usize = 1;
 const SBI_CONSOLE_GETCHAR: usize = 2;
@@ -20,4 +23,17 @@ pub fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) usize {
 
 pub fn console_putchar(c: usize) void {
     _ = sbi_call(SBI_CONSOLE_PUTCHAR, c, 0, 0);
+}
+
+pub fn set_timer(timer: usize) void {
+    _ = sbi_call(SBI_SET_TIMER, timer, 0, 0);
+}
+
+pub fn console_getchar() usize {
+    return sbi_call(SBI_CONSOLE_GETCHAR, 0, 0, 0);
+}
+
+pub fn shutdown() noreturn {
+    _ = sbi_call(SBI_SHUTDOWN, 0, 0, 0);
+    panic.panic("It should shutdown!", .{});
 }
