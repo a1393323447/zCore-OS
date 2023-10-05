@@ -100,7 +100,7 @@ pub fn load_apps() void {
         std.mem.copy(u8, dst[0..size], src[0..size]);
         console.logger.info("App {} loaded", .{i});
     }
-    console.logger.info("All tasks loaded", .{});
+    console.logger.info("All apps loaded", .{});
 }
 
 pub fn init_app_ctx(app_id: usize) usize {
