@@ -3,7 +3,7 @@
 /// hart (core) id registers
 pub const mhartid = struct {
     pub inline fn read() usize {
-        return asm (
+        return asm volatile (
             \\ csrr %[ret], mhartid
             : [ret] "=r" (-> usize),
         );
@@ -22,8 +22,8 @@ pub const mstatus = struct {
         User = 0,
     };
 
-    inline fn _read() usize {
-        return asm (
+    pub inline fn _read() usize {
+        return asm volatile (
             \\ csrr %[ret], mstatus 
             : [ret] "=r" (-> usize),
         );
@@ -37,14 +37,22 @@ pub const mstatus = struct {
         );
     }
 
-    inline fn set_mpp(mpp: MPP) void {
+    pub inline fn set_mpp(mpp: MPP) void {
         var value = _read();
         value &= !MPP_MASK;
         value |= mpp << 11;
         _write(value);
     }
 
-    inline fn set_mie() void {
+    pub inline fn set_mie() void {
+        asm volatile (
+            \\ csrs mstatus, %[MIE]
+            :
+            : [MIE] "i" (MIE),
+        );
+    }
+
+    pub inline fn set_sie() void {
         asm volatile (
             \\ csrs mstatus, %[MIE]
             :
@@ -197,12 +205,12 @@ pub const mscratch = struct {
 /// Supervisor Trap Cause
 pub const scause = struct {
     pub inline fn read() Scause {
-        var bits = asm (
+        const bits = asm volatile (
             \\ csrr %[ret], scause
             : [ret] "=r" (-> usize),
         );
 
-        return Scause{ .bits = bits };
+        return Scause { .bits = bits };
     }
 
     pub const Scause = struct {
@@ -210,7 +218,8 @@ pub const scause = struct {
 
         const Self = @This();
 
-        const bit: usize = 1 << (@sizeOf(usize) * 8 - 1);
+        const nbit: usize = @sizeOf(usize) * 8 - 1;
+        const bit: usize = 1 << nbit;
 
         pub inline fn code(self: Self) usize {
             return self.bits & ~bit;
@@ -225,7 +234,7 @@ pub const scause = struct {
         }
 
         pub inline fn is_interrupt(self: Self) bool {
-            return self.bits & bit != 0;
+            return (self.bits >> nbit) == 1;
         }
 
         pub inline fn is_exception(self: Self) bool {
@@ -240,10 +249,13 @@ pub const scause = struct {
 
     pub const Interrupt = enum {
         UserSoft,
+        VirtualSupervisorSoft,
         SupervisorSoft,
         UserTimer,
+        VirtualSupervisorTimer,
         SupervisorTimer,
         UserExternal,
+        VirtualSupervisorExternal,
         SupervisorExternal,
         Unknown,
 
@@ -253,10 +265,13 @@ pub const scause = struct {
             return switch (nr) {
                 0 => Interrupt.UserSoft,
                 1 => Interrupt.SupervisorSoft,
+                2 => Interrupt.VirtualSupervisorSoft,
                 4 => Interrupt.UserTimer,
                 5 => Interrupt.SupervisorTimer,
+                6 => Interrupt.VirtualSupervisorTimer,
                 8 => Interrupt.UserExternal,
                 9 => Interrupt.SupervisorExternal,
+                10 => Interrupt.VirtualSupervisorExternal,
                 else => Interrupt.Unknown,
             };
         }
@@ -271,9 +286,14 @@ pub const scause = struct {
         StoreMisaligned,
         StoreFault,
         UserEnvCall,
+        VirtualSupervisorEnvCall,
         InstructionPageFault,
         LoadPageFault,
         StorePageFault,
+        InstructionGuestPageFault,
+        LoadGuestPageFault,
+        VirtualInstruction,
+        StoreGuestPageFault,
         Unknown,
 
         const Self = @This();
@@ -299,9 +319,36 @@ pub const scause = struct {
 
 pub const stval = struct {
     pub inline fn read() usize {
-        return asm (
+        return asm volatile (
             \\ csrr %[ret], stval
             : [ret] "=r" (-> usize),
+        );
+    }
+};
+
+pub const time = struct {
+    pub inline fn read() usize {
+        return asm volatile (
+            \\ rdtime %[ret]
+            : [ret] "=r" (-> usize),
+        );
+    }
+};
+
+pub const sie = struct {
+    pub fn set_timer() void {
+        asm volatile (
+            \\ csrs sie, %[bits]
+            :
+            : [bits] "r" (1<<5),
+        );
+    }
+
+    pub fn clear_timer() void {
+        asm volatile (
+            \\ csrc sie, %[bits]
+            :
+            : [bits] "r" (1<<5),
         );
     }
 };
