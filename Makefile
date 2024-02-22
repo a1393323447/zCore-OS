@@ -1,4 +1,11 @@
+ifeq ($(shell uname), Darwin)
+# macOS
+GDB = gdb
+else
+# Linux
 GDB = gdb-multiarch
+endif
+
 PYTHON = python3
 REMOTE = localhost:1234
 
