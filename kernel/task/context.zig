@@ -1,6 +1,5 @@
 const std = @import("std");
-
-extern fn __restore() callconv(.Naked) void;
+const trap = @import("../trap/lib.zig");
 
 pub const TaskContext = struct {
     ra: usize,
@@ -13,9 +12,9 @@ pub const TaskContext = struct {
         return std.mem.zeroes(Self);
     }
 
-    pub fn goto_restore(ksp: usize) Self {
+    pub fn goto_trap_return(ksp: usize) Self {
         return Self {
-            .ra = @intFromPtr(&__restore),
+            .ra = @intFromPtr(&trap.trap_return),
             .sp = ksp,
             .s = std.mem.zeroes([12]usize),
         };

@@ -1,35 +1,19 @@
-const SpinLock = @import("shared").lock.SpinLock;
-
+const std = @import("std");
 const panic = @import("../panic.zig");
 const riscv = @import("../riscv/lib.zig");
 const config = @import("../config.zig");
 const loader = @import("../loader.zig");
 const console = @import("../console.zig");
 const timer = @import("../timer.zig");
+const task = @import("task.zig");
+
+const SpinLock = @import("shared").lock.SpinLock;
+const ArrayList = std.ArrayList;
 
 const TaskContext = @import("context.zig").TaskContext;
+const TaskStatus = task.TaskStatus;
+const TaskControlBlock = task.TaskControlBlock;
 pub extern fn __switch(curr_ctx_ptr: *TaskContext, next_ctx_ptr: *TaskContext) callconv(.C) void;
-
-pub const TaskStatus = enum {
-    UnInit,
-    Ready,
-    Running,
-    Exited,
-};
-
-pub const TaskControlBlock = struct {
-    status: TaskStatus,
-    ctx: TaskContext,
-
-    const Self = @This();
-
-    pub fn init() Self {
-        return TaskControlBlock {
-            .status = TaskStatus.UnInit,
-            .ctx = TaskContext.zero(),
-        };
-    }
-};
 
 pub const TaskMananger = struct {
     app_num: usize,
@@ -87,6 +71,12 @@ pub const TaskMananger = struct {
         return null;
     }
 
+    fn get_current_token(self: *Self) usize {
+        MANAGER_LOCK.acquire();
+        defer MANAGER_LOCK.release();
+        return self.tasks[self.cur_task].get_trap_ctx();
+    }
+
     fn run_next_task(self: *Self) void {
         if (self.find_next_task()) |next| {
             MANAGER_LOCK.acquire();
@@ -110,11 +100,15 @@ var TASK_MANAGER: TaskMananger = undefined;
 var MANAGER_LOCK: SpinLock = SpinLock.init();
 
 pub fn init() void {
-    TASK_MANAGER.app_num = loader.get_app_num();
+    const app_num = loader.get_app_num();
+    TASK_MANAGER.app_num = app_num;
     TASK_MANAGER.cur_task = 0;
-    for (&TASK_MANAGER.tasks, 0..) |*task, i| {
-        task.ctx = TaskContext.goto_restore(loader.init_app_ctx(i));
-        task.status = TaskStatus.Ready;
+    TASK_MANAGER.tasks = ArrayList(TaskControlBlock).init(allocator);
+    for (0..app_num) |i| {
+        TASK_MANAGER.tasks.append(TaskControlBlock.init(
+            loader.get_app_data(i),
+            i,
+        )) catch unreachable;
     }
 }
 
