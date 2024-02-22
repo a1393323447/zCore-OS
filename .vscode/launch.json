@@ -47,5 +47,48 @@
                 }
             ]
         },
+        {
+            "name": "macos debug zcore-os with gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/zcore-os",
+            "args": [],
+            "stopAtEntry": false,
+            "miDebuggerArgs": "",
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "pipeTransport": {
+                "debuggerPath": "/usr/local/bin/gdb",
+                "pipeProgram": "/bin/zsh",
+                "pipeArgs": [
+                    "-c"
+                ],
+                "pipeCwd": ""
+            },
+            "setupCommands": [
+                {
+                    "description": "Build zcore-os in debug mode",
+                    "text": "make build-debug",
+                },
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Arch to RISC-V 64",
+                    "text": "set arch riscv:rv64",
+                },
+                {
+                    "description": "Set remote target",
+                    "text": "target remote localhost:1234",
+                },
+                {
+                    "description": "Set a default breakpoint at 0x80200000",
+                    "text": "b *0x80200000",
+                }
+            ]
+        },
     ]
 }
