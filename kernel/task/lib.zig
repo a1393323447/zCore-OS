@@ -6,6 +6,7 @@ const loader = @import("../loader.zig");
 const console = @import("../console.zig");
 const timer = @import("../timer.zig");
 const task = @import("task.zig");
+const trap = @import("../trap/lib.zig");
 
 const SpinLock = @import("shared").lock.SpinLock;
 const ArrayList = std.ArrayList;
@@ -74,6 +75,12 @@ pub const TaskMananger = struct {
     fn get_current_token(self: *Self) usize {
         MANAGER_LOCK.acquire();
         defer MANAGER_LOCK.release();
+        return self.tasks[self.cur_task].get_user_token();
+    }
+
+    fn get_current_trap_ctx(self: *Self) *trap.TrapContext {
+        MANAGER_LOCK.acquire();
+        defer MANAGER_LOCK.release();
         return self.tasks[self.cur_task].get_trap_ctx();
     }
 
@@ -99,7 +106,7 @@ pub const TaskMananger = struct {
 var TASK_MANAGER: TaskMananger = undefined;
 var MANAGER_LOCK: SpinLock = SpinLock.init();
 
-pub fn init() void {
+pub fn init(allocator: std.mem.Allocator) void {
     const app_num = loader.get_app_num();
     TASK_MANAGER.app_num = app_num;
     TASK_MANAGER.cur_task = 0;
@@ -142,4 +149,12 @@ pub fn suspend_current_and_run_next() void {
 pub fn exit_current_and_run_next() void {
     mark_current_exited();
     run_next_task();
+}
+
+pub fn current_user_token() usize {
+    return TASK_MANAGER.get_current_token();
+}
+
+pub fn current_trap_ctx() *trap.TrapContext {
+    return TASK_MANAGER.get_current_token();
 }

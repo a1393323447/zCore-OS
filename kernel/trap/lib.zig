@@ -121,6 +121,17 @@ pub export fn trap_handler(ctx: *TrapContext) *TrapContext {
 pub export fn trap_return() noreturn {
     set_user_trap_entry();
     const trap_ctx_ptr = config.TRAP_CONTEXT;
+    const user_satp = task.current_user_token();
+    const restore_va = @intFromPtr(&__restore) - @intFromPtr(&__alltraps) + config.TRAMPOLINE;
+    asm volatile (
+        \\ fence.i
+        \\ jr %[trap_ctx_ptr]
+        ::
+        [restore_va] "{a0}" (restore_va),
+        [user_satp] "{a1}" (user_satp),
+        [trap_ctx_ptr] "r" (trap_ctx_ptr),
+        : "memory"
+    );
 }
 
 pub export fn trap_from_kernel() noreturn {
