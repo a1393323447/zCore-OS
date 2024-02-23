@@ -37,6 +37,7 @@ pub fn kernel_space_token() usize {
 }
 
 // TDOD: manage memeory: init and deinit pair
+// we let it leak now
 
 extern fn stext() noreturn;
 extern fn etext() noreturn;
@@ -280,8 +281,77 @@ pub const MemorySet = struct {
         return memory_set;
     }
 
-    pub fn from_elf(elf_data: []u8) ELFMemInfo {
+    pub fn from_elf(allocator: std.mem.Allocator, elf_data: []u8) ELFMemInfo {
+        var mem_set = Self.new_bare(allocator);
+        mem_set.map_trampoline();
 
+        var elf_buf = std.io.fixedBufferStream(elf_data);
+        const header = std.elf.Header.read(elf_buf) catch |e| panic.panic("Faield to parse elf due to {}", .{e});
+        var prog_header_iter = header.program_header_iterator(elf_buf);
+
+        const PROG_TYPE_LOAD: u32 = 1;
+        const FLAG_X: u32 = 0x1;
+        const FLAG_W: u32 = 0x2;
+        const FLAG_R: u32 = 0x4;
+
+        var max_end_vpn = addr.VirtPageNum { .v = 0 };
+        while (try prog_header_iter.next()) |prog_hd| {
+            if (prog_hd.p_type == PROG_TYPE_LOAD) {
+                const va: usize = @intCast(prog_hd.p_vaddr);
+                const start_va = addr.VirtAddr.from(va);
+                const end_va = addr.VirtAddr.from(va + @as(usize, @intCast(prog_hd.p_memsz)));
+                var map_perm = MapPermissions.empty().set(MapPermission.U);
+                const ph_flags = prog_hd.p_flags;
+                if (ph_flags & FLAG_R == FLAG_R) {
+                    map_perm.set(MapPermission.R);
+                }
+                if (ph_flags & FLAG_W == FLAG_W) {
+                    map_perm.set(MapPermission.W);
+                }
+                if (ph_flags & FLAG_X == FLAG_X) {
+                    map_perm.set(MapPermission.X);
+                }
+                const map_area = MapArea.new(
+                    start_va,
+                    end_va,
+                    MapType.Framed,
+                    map_perm,
+                    allocator,
+                );
+
+                const offset: usize = @intCast(prog_hd.p_offset);
+                const filesz: usize = @intCast(prog_hd.p_filesz);
+                mem_set.push(
+                    map_area,
+                    elf_data[offset..(offset + filesz)]
+                );
+                max_end_vpn = map_area.vpn_range.r;
+            }
+        }
+        // map user stack
+        const max_end_va = addr.VirtAddr.from_vpn(max_end_vpn);
+        var user_stack_bottom = max_end_va.v;
+        // guard page
+        user_stack_bottom += config.PAGE_SIZE;
+        const user_stack_top = user_stack_bottom + config.USER_STACK_SIZE;
+        mem_set.push(MapArea.new(
+            addr.VirtAddr.from(user_stack_bottom),
+            addr.VirtAddr.from(user_stack_top),
+            MapType.Framed,
+            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W).set(MapPermission.U)
+        ), null);
+        // map TrapContext
+        mem_set.push(MapArea.new(
+            addr.VirtAddr.from(config.TRAP_CONTEXT),
+            addr.VirtAddr.from(config.TRAMPOLINE),
+            MapType.Framed,
+            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W)
+        ), null);
+        return ELFMemInfo {
+            .mem_set = mem_set,
+            .user_stack_top = user_stack_top,
+            .entry_point = @intCast(header.entry),
+        };
     }
 
 };

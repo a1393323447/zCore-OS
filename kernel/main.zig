@@ -1,23 +1,41 @@
 const console = @import("console.zig");
-const loader = @import("loader.zig");
+// const loader = @import("loader.zig");
 const panic = @import("panic.zig");
-const trap = @import("trap/lib.zig");
-const task = @import("task/lib.zig");
-const timer = @import("timer.zig");
+// const trap = @import("trap/lib.zig");
+// const task = @import("task/lib.zig");
+// const timer = @import("timer.zig");
+const mm = @import("mm/lib.zig");
 
 export fn _kmain() noreturn {
     clear_bss();
 
     print_logo();
 
-    trap.init();
-    task.init();
+    // trap.init();
+    // task.init();
 
-    loader.load_apps();
-    trap.enable_timer_interrupt();
-    task.run_first_task();
+    // loader.load_apps();
+    // trap.enable_timer_interrupt();
+    // task.run_first_task();
 
-    panic.panic("Unreachable in _kmain!", .{});
+    const std = @import("std");
+
+    mm.heap_allocator.init_heap();
+    var arr = std.ArrayList(usize).init(mm.heap_allocator.allocator);
+    arr.append(10) catch unreachable;
+    arr.append(11) catch unreachable;
+    arr.append(12) catch unreachable;
+    arr.append(13) catch unreachable;
+
+    for (0..4) |i| {
+        console.logger.info("{d}", .{arr.items[i]});
+    }
+
+    console.logger.info("Try deinit arr", .{});
+    arr.deinit();
+    console.logger.info("deinit done", .{});
+
+    panic.panic("Unreachable in _kmain!\n", .{});
 }
 
 fn print_logo() void {
