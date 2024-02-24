@@ -19,16 +19,17 @@ export fn _kmain() noreturn {
     // task.run_first_task();
 
     const std = @import("std");
-
     mm.heap_allocator.init_heap();
-    var arr = std.ArrayList(usize).init(mm.heap_allocator.allocator);
-    arr.append(10) catch unreachable;
-    arr.append(11) catch unreachable;
-    arr.append(12) catch unreachable;
-    arr.append(13) catch unreachable;
 
-    for (0..4) |i| {
-        console.logger.info("{d}", .{arr.items[i]});
+    const alloc = mm.heap_allocator.allocator;
+
+    var arr = std.ArrayList(usize).init(alloc);
+    for (0..2) |i| {
+        arr.append(i) catch unreachable;
+    }
+
+    for (0..2) |i| {
+        arr.items[i] += 1;
     }
 
     console.logger.info("Try deinit arr", .{});

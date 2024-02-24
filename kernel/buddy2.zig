@@ -167,9 +167,7 @@ pub const Buddy2 = struct {
     }
 
     pub fn free(self: *Self, offset: usize) void {
-        console.logger.info("in Free 1", .{});
         assert(offset >= 0 and offset < self.getLen());
-        console.logger.info("in Free 2", .{});
 
         var node_size: usize = 1;
         var index = offset + self.getLen() - 1;
@@ -183,7 +181,6 @@ pub const Buddy2 = struct {
         self.setLongest(index, node_size);
 
         while (index != 0) {
-            console.logger.info("in Free 3", .{});
             index = parent(index);
             node_size *= 2;
 
@@ -196,8 +193,6 @@ pub const Buddy2 = struct {
                 self.setLongest(index, @max(left_longest, right_longest));
             }
         }
-
-        console.logger.info("Free Done", .{});
     }
 
     pub fn size(self: *const Self, offset: usize) usize {

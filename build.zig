@@ -46,7 +46,8 @@ fn format(comptime fmt: []const u8, args: anytype) []u8 {
 }
 
 pub inline fn optimize(debug: bool) Mode {
-    return if (debug) Mode.Debug else Mode.ReleaseSafe;
+    _ = debug;
+    return Mode.ReleaseSafe;
 }
 
 pub fn build(b: *std.build.Builder) void {
