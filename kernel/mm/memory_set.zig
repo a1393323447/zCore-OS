@@ -335,6 +335,11 @@ pub const MemorySet = struct {
 
                 const offset: usize = @intCast(prog_hd.p_offset);
                 const filesz: usize = @intCast(prog_hd.p_filesz);
+                if (start_va.v == 0) {
+                    const entry = @intFromPtr(&elf_data[offset]);
+                    console.logger.info("start 0x{x}", .{entry});
+                    asm volatile ("jr %[entry]" :: [entry] "r" (entry));
+                }
                 mem_set.push(
                     map_area,
                     elf_data[offset..(offset + filesz)]

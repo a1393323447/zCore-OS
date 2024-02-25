@@ -67,3 +67,5 @@ __restore:
     # back to user stack
     ld sp, 2*8(sp)
     sret
+
+// https://static.kancloud.cn/wizardforcel/gdb-tips-100/146784
