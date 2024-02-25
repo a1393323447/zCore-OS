@@ -35,7 +35,7 @@ pub const TaskMananger = struct {
         var unused = TaskContext.zero();
         
         timer.set_next_trigger();
-        asm volatile ("sfence.vma" ::: "memory");
+
         __switch(&unused, next_task_ctx_ptr);
 
         panic.panic("unreachable in run_first_task!", .{});
@@ -123,6 +123,7 @@ pub fn init(allocator: std.mem.Allocator) void {
         };
         TASK_MANAGER.tasks.append(block) catch unreachable;
     }
+    asm volatile ("sfence.vma" ::: "memory");
 }
 
 /// run first task

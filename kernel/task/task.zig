@@ -2,6 +2,7 @@ const std = @import("std");
 const mm = @import("../mm/lib.zig");
 const addr = mm.address;
 const config = @import("../config.zig");
+const console = @import("../console.zig");
 const trap = @import("../trap/lib.zig");
 const panic = @import("../panic.zig");
 
@@ -66,6 +67,8 @@ pub const TaskControlBlock = struct {
             kernel_stack_info.top,
             @intFromPtr(&trap.trap_handler),
         );
+
+        console.logger.debug("entry 0x{x}", .{elf_mem_info.entry_point});
 
         return task_control_block;
     }
