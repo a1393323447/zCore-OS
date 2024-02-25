@@ -21,15 +21,15 @@ const FrameTracker = frame_allocator.FrameTracker;
 var KERNEL_SPACE_LOCK = shared.lock.SpinLock.init();
 pub var KERNEL_SPACE: MemorySet = undefined;
 
-// TODO: This function should be called somewhere
 pub fn init_kernel_space(allocator: std.mem.Allocator) void {
     KERNEL_SPACE = MemorySet.new_kernel(allocator);
+    KERNEL_SPACE.activate();
 }
 
-pub fn kernel_space_insert_framed_area(start_va: addr.VirtAddr, end_va: addr.VirtAddr, permissions: MapPermissions) void {
+pub fn kernel_space_insert_framed_area(start_va: addr.VirtAddr, end_va: addr.VirtAddr, permissions: MapPermissions) !void {
     KERNEL_SPACE_LOCK.acquire();
     defer KERNEL_SPACE_LOCK.release();
-    KERNEL_SPACE.insert_framed_area(start_va, end_va, permissions);
+    try KERNEL_SPACE.insert_framed_area(start_va, end_va, permissions);
 }
 
 pub fn kernel_space_token() usize {
@@ -52,9 +52,9 @@ extern fn strampoline() noreturn;
 
 pub const MapPermission = enum(u8) {
     R = 1 << 1,
-    W = 1 << 1,
-    X = 1 << 1,
-    U = 1 << 1,
+    W = 1 << 2,
+    X = 1 << 3,
+    U = 1 << 4,
 };
 
 pub const MapPermissions = struct {
@@ -69,14 +69,12 @@ pub const MapPermissions = struct {
         return Self { .bits = bits };
     }
 
-    pub fn set(self: *Self, flag: MapPermission) Self {
-        self.* = self.* | @intFromEnum(flag);
-        return self.*;
+    pub fn set(self: Self, flag: MapPermission) Self {
+        return .{ .bits = self.bits | @intFromEnum(flag) };
     }
 
-    pub fn unset(self: *Self, flag: MapPermission) Self {
-        self.* = self.* & ~@intFromEnum(flag);
-        return self.*;
+    pub fn unset(self: Self, flag: MapPermission) Self {
+        return .{ .bits = self.bits & ~@intFromEnum(flag) };
     }
 };
 
@@ -86,10 +84,10 @@ pub const MapType = enum {
 };
 
 pub const MapArea = struct {
-    const MemMap: type = BTreeMap(addr.VirtAddr, FrameTracker);
+    const MemMap: type = BTreeMap(addr.VirtPageNum, FrameTracker);
 
     vpn_range: addr.VPNRange,
-    data_frames: BTreeMap(addr.VirtAddr, FrameTracker),
+    data_frames: MemMap,
     map_type: MapType,
     map_perm: MapPermissions,
 
@@ -102,27 +100,33 @@ pub const MapArea = struct {
         allocator: std.mem.Allocator,
     ) Self {
         return Self {
-            .vpn_range = addr.VPNRange.new(start_va, end_va),
-            .data_frams = BTreeMap(addr.VirtAddr, FrameTracker).init(allocator),
+            .vpn_range = addr.VPNRange.new(start_va.floor(), end_va.ceil()),
+            .data_frames = MemMap.init(allocator),
             .map_type = map_type,
             .map_perm = map_perm,
         };
     }
 
-    pub fn map_one(self: *Self, page_table: *PageTable, vpn: addr.VirtPageNum) void {
+    pub fn map_one(self: *Self, page_table: *PageTable, vpn: addr.VirtPageNum) !void {
         var ppn: addr.PhysPageNum = undefined;
         switch (self.map_type) {
             .Identical => {
                 ppn = addr.PhysPageNum { .v = vpn.v };
+                const pte_flags = PTEFlags.from_bits(self.map_perm.bits);
+                try page_table.map(vpn, ppn, pte_flags);
             },
             .Framed => {
-                const frame = frame_allocator.frame_alloc().?;
+                const frame = frame_allocator.frame_alloc() orelse panic.panic("no more mem", .{});
                 ppn = frame.ppn;
-                self.data_frames.fetchPut(vpn, frame) catch unreachable;
+                errdefer {
+                    frame.deinit();
+                    _ = self.data_frames.fetchRemove(vpn) catch {};
+                }
+                _ = try self.data_frames.fetchPut(vpn, frame);
+                const pte_flags = PTEFlags.from_bits(self.map_perm.bits);
+                try page_table.map(vpn, ppn, pte_flags);
             },
         }
-        const pte_flags = PTEFlags.from_bits(self.map_perm.bits);
-        page_table.map(vpn, ppn, pte_flags);
     }
 
     pub fn unmap_one(self: *Self, page_table: *PageTable, vpn: addr.VirtPageNum) void {
@@ -136,10 +140,10 @@ pub const MapArea = struct {
         page_table.unmap(vpn);
     }
 
-    pub fn map(self: *Self, page_table: *PageTable) void {
+    pub fn map(self: *Self, page_table: *PageTable) !void {
         var vpn_range = self.vpn_range;
         while (vpn_range.next()) |vpn| {
-            self.map_one(page_table, vpn);
+            try self.map_one(page_table, vpn);
         }
     }
 
@@ -153,7 +157,7 @@ pub const MapArea = struct {
     pub fn copy_data(self: *Self, page_table: *PageTable, data: []u8) void {
         assert.assert_eq(self.map_type, MapType.Framed, @src());
         var start: usize = 0;
-        var current_vpn = self.vpn_range.get_start();
+        var current_vpn = self.vpn_range.l;
         const len = data.len;
         while (true) {
             const src = data[start..@min(len, start + config.PAGE_SIZE)];
@@ -181,12 +185,14 @@ pub const ELFMemInfo = struct {
 pub const MemorySet = struct {
     page_table: PageTable,
     areas: ArrayList(MapArea),
+    allocator: std.mem.Allocator,
 
     const Self = @This();
     pub fn new_bare(allocator: std.mem.Allocator) Self {
         return Self {
             .page_table = PageTable.init(allocator),
             .areas = ArrayList(MapArea).init(allocator),
+            .allocator = allocator,
         };
     }
 
@@ -194,21 +200,23 @@ pub const MemorySet = struct {
         return self.page_table.token();
     }
 
-    pub fn insert_framed_area(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr, permissions: MapPermissions) void {
-        self.push(MapArea.new(
+    pub fn insert_framed_area(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr, permissions: MapPermissions) !void {
+        try self.push(MapArea.new(
             start_va,
-            end_va, 
+            end_va,
             MapType.Framed,
-            permissions
+            permissions,
+            self.allocator,
         ), null);
     }
 
-    fn push(self: *Self, map_area: MapArea, data: ?[]u8) void {
-        map_area.map(&self.page_table);
+    fn push(self: *Self, map_area: MapArea, data: ?[]u8) !void {
+        var mut_map_area = map_area;
+        try mut_map_area.map(&self.page_table);
         if (data) |d| {
-            map_area.copy_data(&self.page_table, d);
+            mut_map_area.copy_data(&self.page_table, d);
         }
-        self.areas.append(map_area);
+        self.areas.append(mut_map_area) catch unreachable;
     }
 
     fn map_trampoline(self: *Self) void {
@@ -216,7 +224,7 @@ pub const MemorySet = struct {
             addr.VirtPageNum.from_addr(addr.VirtAddr.from(config.TRAMPOLINE)), 
             addr.PhysPageNum.from_addr(addr.PhysAddr.from(@intFromPtr(&strampoline))),
             PTEFlags.empty().set(PTEFlag.R).set(PTEFlag.X)
-        );
+        ) catch panic.panic("Faield to map trampoline", .{});
     }
 
     pub fn activate(self: *Self) void {
@@ -240,53 +248,58 @@ pub const MemorySet = struct {
 
         console.logger.info("mapping .text section", .{});
         memory_set.push(MapArea.new(
-            @intFromPtr(&stext),
-            @intFromPtr(&etext),
+            addr.VirtAddr.from(@intFromPtr(&stext)),
+            addr.VirtAddr.from(@intFromPtr(&etext)),
             MapType.Identical,
-            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        ), null);
+            MapPermissions.empty().set(MapPermission.R).set(MapPermission.X),
+            allocator,
+        ), null) catch {};
         
         console.logger.info("mapping .rodata section", .{});
         memory_set.push(MapArea.new(
-            @intFromPtr(&srodata),
-            @intFromPtr(&erodata),
+            addr.VirtAddr.from(@intFromPtr(&srodata)),
+            addr.VirtAddr.from(@intFromPtr(&erodata)),
             MapType.Identical,
             MapPermissions.empty().set(MapPermission.R),
-        ), null);
+            allocator,
+        ), null) catch {};
 
         console.logger.info("mapping .data section", .{});
         memory_set.push(MapArea.new(
-            @intFromPtr(&sdata),
-            @intFromPtr(&edata),
+            addr.VirtAddr.from(@intFromPtr(&sdata)),
+            addr.VirtAddr.from(@intFromPtr(&edata)),
             MapType.Identical,
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        ), null);
+            allocator,
+        ), null) catch {};
 
         console.logger.info("mapping .bss section", .{});
         memory_set.push(MapArea.new(
-            @intFromPtr(&sbss_with_stack),
-            @intFromPtr(&ebss),
+            addr.VirtAddr.from(@intFromPtr(&sbss_with_stack)),
+            addr.VirtAddr.from(@intFromPtr(&ebss)),
             MapType.Identical,
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        ), null);
+            allocator,
+        ), null) catch {};
 
         console.logger.info("mapping physical memory", .{});
         memory_set.push(MapArea.new(
-            @intFromPtr(&ekernel),
+            addr.VirtAddr.from(@intFromPtr(&ekernel)),
             addr.VirtAddr.from(config.MEMORY_END),
             MapType.Identical,
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        ), null);
+            allocator,
+        ), null) catch {};
 
         return memory_set;
     }
 
-    pub fn from_elf(allocator: std.mem.Allocator, elf_data: []u8) ELFMemInfo {
+    pub fn from_elf(allocator: std.mem.Allocator, elf_data: []u8) !ELFMemInfo {
         var mem_set = Self.new_bare(allocator);
         mem_set.map_trampoline();
 
         var elf_buf = std.io.fixedBufferStream(elf_data);
-        const header = std.elf.Header.read(elf_buf) catch |e| panic.panic("Faield to parse elf due to {}", .{e});
+        const header = std.elf.Header.read(&elf_buf) catch |e| panic.panic("Faield to parse elf due to {}", .{e});
         var prog_header_iter = header.program_header_iterator(elf_buf);
 
         const PROG_TYPE_LOAD: u32 = 1;
@@ -303,13 +316,13 @@ pub const MemorySet = struct {
                 var map_perm = MapPermissions.empty().set(MapPermission.U);
                 const ph_flags = prog_hd.p_flags;
                 if (ph_flags & FLAG_R == FLAG_R) {
-                    map_perm.set(MapPermission.R);
+                    map_perm = map_perm.set(MapPermission.R);
                 }
                 if (ph_flags & FLAG_W == FLAG_W) {
-                    map_perm.set(MapPermission.W);
+                    map_perm = map_perm.set(MapPermission.W);
                 }
                 if (ph_flags & FLAG_X == FLAG_X) {
-                    map_perm.set(MapPermission.X);
+                    map_perm = map_perm.set(MapPermission.X);
                 }
                 const map_area = MapArea.new(
                     start_va,
@@ -318,13 +331,14 @@ pub const MemorySet = struct {
                     map_perm,
                     allocator,
                 );
+                console.logger.debug("map 0x{x} -> 0x{x}", .{start_va.v, end_va.v});
 
                 const offset: usize = @intCast(prog_hd.p_offset);
                 const filesz: usize = @intCast(prog_hd.p_filesz);
                 mem_set.push(
                     map_area,
                     elf_data[offset..(offset + filesz)]
-                );
+                ) catch {};
                 max_end_vpn = map_area.vpn_range.r;
             }
         }
@@ -338,15 +352,17 @@ pub const MemorySet = struct {
             addr.VirtAddr.from(user_stack_bottom),
             addr.VirtAddr.from(user_stack_top),
             MapType.Framed,
-            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W).set(MapPermission.U)
-        ), null);
+            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W).set(MapPermission.U),
+            allocator,
+        ), null) catch {};
         // map TrapContext
         mem_set.push(MapArea.new(
             addr.VirtAddr.from(config.TRAP_CONTEXT),
             addr.VirtAddr.from(config.TRAMPOLINE),
             MapType.Framed,
-            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W)
-        ), null);
+            MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
+            allocator,
+        ), null) catch {};
         return ELFMemInfo {
             .mem_set = mem_set,
             .user_stack_top = user_stack_top,
@@ -356,4 +372,32 @@ pub const MemorySet = struct {
 
 };
 
-// btreemap: https://github.com/pmkap/zig-btreemap/blob/main/src/btreemap.zig
+pub fn remap_test() void {
+    const mid_text = addr.VirtAddr.from((@intFromPtr(&stext) + @intFromPtr(&etext)) / 2);
+    const mid_rodata = addr.VirtAddr.from((@intFromPtr(&srodata) + @intFromPtr(&erodata)) / 2);
+    const mid_data = addr.VirtAddr.from((@intFromPtr(&sdata) + @intFromPtr(&edata)) / 2);
+    assert.assert(
+        !KERNEL_SPACE.page_table
+            .translate(mid_text.floor())
+            .?
+            .is_writable(), 
+        "mid_text should not be writable", 
+        .{}
+    );
+    assert.assert(
+        !KERNEL_SPACE.page_table
+            .translate(mid_rodata.floor())
+            .?
+            .is_writable(), 
+        "mid_rodata should not be writable", 
+        .{}
+    );
+    assert.assert(
+        !KERNEL_SPACE.page_table
+            .translate(mid_data.floor())
+            .?
+            .is_executable(),
+        "mid_data should not be executable", 
+        .{}
+    );
+}

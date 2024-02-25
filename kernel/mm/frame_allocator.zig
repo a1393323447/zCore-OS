@@ -4,6 +4,8 @@ const config = @import("../config.zig");
 const addr = @import("address.zig");
 const panic = @import("../panic.zig");
 
+const console = @import("../console.zig");
+
 const ArrayList = std.ArrayList;
 
 pub const FrameTracker  = struct {
@@ -52,7 +54,7 @@ pub const StackFrameAllocator = struct {
         if (ppn.v >= self.current) {
             panic.panic("Frame ppn = {x} has not been allocated!", .{ppn.v});
         }
-        self.recycled.append(ppn) catch unreachable;
+        self.recycled.append(ppn.v) catch unreachable;
     }
 };
 
@@ -70,7 +72,11 @@ pub fn init_frame_allocator(allocator: std.mem.Allocator) void {
 pub fn frame_alloc() ?FrameTracker {
     FRAME_ALLOC_LOCK.acquire();
     defer FRAME_ALLOC_LOCK.release();
-    return FRAME_ALLOCATOR.alloc();
+    if (FRAME_ALLOCATOR.alloc()) |ppn| {
+        return FrameTracker.new(ppn);
+    } else {
+        return null;
+    }
 }
 
 pub fn frame_dealloc(ppn: addr.PhysPageNum) void {

@@ -14,19 +14,19 @@ const ArrayList = std.ArrayList;
 const TaskContext = @import("context.zig").TaskContext;
 const TaskStatus = task.TaskStatus;
 const TaskControlBlock = task.TaskControlBlock;
-pub extern fn __switch(curr_ctx_ptr: *TaskContext, next_ctx_ptr: *TaskContext) callconv(.C) void;
+pub extern fn __switch(curr_ctx_ptr: *TaskContext, next_ctx_ptr: *const TaskContext) callconv(.C) void;
 
 pub const TaskMananger = struct {
     app_num: usize,
     cur_task: usize,
-    tasks: [config.MAX_APP_NUM]TaskControlBlock,
+    tasks: ArrayList(TaskControlBlock),
 
     const Self = @This();
 
     fn run_first_task(self: *Self) noreturn {
         MANAGER_LOCK.acquire();
         
-        const first_task = &self.tasks[0];
+        const first_task = &self.tasks.items[0];
         first_task.status = TaskStatus.Running;
         const next_task_ctx_ptr = &first_task.ctx;
         
@@ -35,6 +35,7 @@ pub const TaskMananger = struct {
         var unused = TaskContext.zero();
         
         timer.set_next_trigger();
+        asm volatile ("sfence.vma" ::: "memory");
         __switch(&unused, next_task_ctx_ptr);
 
         panic.panic("unreachable in run_first_task!", .{});
@@ -44,7 +45,7 @@ pub const TaskMananger = struct {
         MANAGER_LOCK.acquire();
         defer MANAGER_LOCK.release();
 
-        self.tasks[self.cur_task].status = status;
+        self.tasks.items[self.cur_task].status = status;
     }
 
     fn mark_current_suspended(self: *Self) void {
@@ -64,7 +65,7 @@ pub const TaskMananger = struct {
         const end = start + self.app_num;
         for (start..end) |idx| {
             const id = idx % self.app_num;
-            if (self.tasks[id].status == .Ready) {
+            if (self.tasks.items[id].status == .Ready) {
                 return id;
             }
         }
@@ -75,23 +76,23 @@ pub const TaskMananger = struct {
     fn get_current_token(self: *Self) usize {
         MANAGER_LOCK.acquire();
         defer MANAGER_LOCK.release();
-        return self.tasks[self.cur_task].get_user_token();
+        return self.tasks.items[self.cur_task].get_user_token();
     }
 
     fn get_current_trap_ctx(self: *Self) *trap.TrapContext {
         MANAGER_LOCK.acquire();
         defer MANAGER_LOCK.release();
-        return self.tasks[self.cur_task].get_trap_ctx();
+        return self.tasks.items[self.cur_task].get_trap_ctx();
     }
 
     fn run_next_task(self: *Self) void {
         if (self.find_next_task()) |next| {
             MANAGER_LOCK.acquire();
             const curr = self.cur_task;
-            self.tasks[next].status = .Running;
+            self.tasks.items[next].status = .Running;
             self.cur_task = next;
-            const curr_ctx_ptr = &self.tasks[curr].ctx;
-            const next_ctx_ptr = &self.tasks[next].ctx;
+            const curr_ctx_ptr = &self.tasks.items[curr].ctx;
+            const next_ctx_ptr = &self.tasks.items[next].ctx;
             MANAGER_LOCK.release();
 
             timer.set_next_trigger();
@@ -112,10 +113,15 @@ pub fn init(allocator: std.mem.Allocator) void {
     TASK_MANAGER.cur_task = 0;
     TASK_MANAGER.tasks = ArrayList(TaskControlBlock).init(allocator);
     for (0..app_num) |i| {
-        TASK_MANAGER.tasks.append(TaskControlBlock.init(
+        const block = TaskControlBlock.new(
+            allocator,
             loader.get_app_data(i),
             i,
-        )) catch unreachable;
+        ) catch |e| {
+            console.logger.warn("Failed to load app {d} due to {}", .{i, e});
+            continue;
+        };
+        TASK_MANAGER.tasks.append(block) catch unreachable;
     }
 }
 
@@ -156,5 +162,5 @@ pub fn current_user_token() usize {
 }
 
 pub fn current_trap_ctx() *trap.TrapContext {
-    return TASK_MANAGER.get_current_token();
+    return TASK_MANAGER.get_current_trap_ctx();
 }

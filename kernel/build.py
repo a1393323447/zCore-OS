@@ -27,7 +27,7 @@ link_app_data = r"""
     .global app_{0}_start
     .global app_{0}_end
 app_{0}_start:
-    .incbin "zig-out/bin/{1}.bin"
+    .incbin "zig-out/{1}"
 app_{0}_end:
 """
 

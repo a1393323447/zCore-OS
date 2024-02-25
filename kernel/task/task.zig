@@ -1,7 +1,9 @@
+const std = @import("std");
 const mm = @import("../mm/lib.zig");
 const addr = mm.address;
 const config = @import("../config.zig");
 const trap = @import("../trap/lib.zig");
+const panic = @import("../panic.zig");
 
 const MemSet = mm.memory_set.MemorySet;
 const MapPermission = mm.memory_set.MapPermission;
@@ -24,13 +26,6 @@ pub const TaskControlBlock = struct {
 
     const Self = @This();
 
-    pub fn init() Self {
-        return TaskControlBlock {
-            .status = TaskStatus.UnInit,
-            .ctx = TaskContext.zero(),
-        };
-    }
-
     pub fn get_trap_ctx(self: *const Self) *trap.TrapContext {
         return self.trap_ctx_ppn.get_mut(trap.TrapContext);
     }
@@ -39,8 +34,8 @@ pub const TaskControlBlock = struct {
         return self.mem_set.token();
     }
 
-    pub fn new(elf_data: []u8, app_id: usize) Self {
-        const elf_mem_info = MemSet.from_elf(elf_data);
+    pub fn new(allocator: std.mem.Allocator, elf_data: []u8, app_id: usize) !Self {
+        const elf_mem_info = try MemSet.from_elf(allocator, elf_data);
         const mem_set = elf_mem_info.mem_set;
         const trap_ctx_ppn = mem_set
             .translate(addr.VirtPageNum.from_addr(addr.VirtAddr.from(config.TRAP_CONTEXT)))
@@ -52,7 +47,8 @@ pub const TaskControlBlock = struct {
             addr.VirtAddr.from(kernel_stack_info.bottom),
             addr.VirtAddr.from(kernel_stack_info.top),
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        );
+        ) catch panic.panic("Failed to map kernel stack", .{});
+
         const task_control_block = Self {
             .status = task_status,
             .ctx = TaskContext.goto_trap_return(kernel_stack_info.top),

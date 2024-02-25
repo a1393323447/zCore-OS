@@ -1,4 +1,5 @@
 const config = @import("../config.zig");
+const console = @import("../console.zig");
 const panic = @import("../panic.zig");
 const task = @import("../task/lib.zig");
 const loader = @import("../loader.zig");
@@ -13,7 +14,7 @@ extern fn __restore() callconv(.Naked) void;
 // symbol __alltraps is defined in trap.S
 extern fn __alltraps() callconv(.Naked) void;
 pub fn init() void {
-    regs.stvec.write(@intFromPtr(&__alltraps), regs.stvec.TrapMode.Diret);
+    regs.stvec.write(@intFromPtr(&trap_from_kernel), regs.stvec.TrapMode.Diret);
 }
 
 pub fn enable_timer_interrupt() void {
@@ -28,12 +29,6 @@ fn set_user_trap_entry() void {
     regs.stvec.write(config.TRAMPOLINE, regs.stvec.TrapMode.Diret);
 }
 
-comptime {
-    if (@sizeOf(TrapContext) != 34 * 8) {
-        @compileError("Failed");
-    }
-}
-
 pub const TrapContext = extern struct {
     /// general regs[0..31]
     x: [32]usize,
@@ -42,6 +37,7 @@ pub const TrapContext = extern struct {
     /// CSR sepc
     sepc: usize,
     kernel_satp: usize,
+    kernel_sp: usize,
     trap_handler: usize,
 
     const Self = @This();
@@ -59,7 +55,7 @@ pub const TrapContext = extern struct {
     ) Self {
         var sstatus = regs.sstatus.read();
         regs.sstatus.set_spp(regs.sstatus.SPP.User);
-        var ctx = Self{
+        var ctx = Self {
             .x = std.mem.zeroes([32]usize),
             .sstatus = sstatus,
             .sepc = entry,
@@ -69,16 +65,18 @@ pub const TrapContext = extern struct {
         };
 
         ctx.set_sp(sp);
+        console.logger.info("set usp 0x{x}", .{sp});
         return ctx;
     }
 };
 
-pub export fn trap_handler(ctx: *TrapContext) *TrapContext {
+pub export fn trap_handler() noreturn {
+    set_kernel_trap_entry();
+    const ctx = task.current_trap_ctx();
     const scause = regs.scause.read();
     const stval = regs.stval.read();
 
     const sys = @import("../syscall/lib.zig");
-    const console = @import("../console.zig");
 
     switch (scause.cause()) {
         .exception => |exception| switch (exception) {
@@ -115,7 +113,7 @@ pub export fn trap_handler(ctx: *TrapContext) *TrapContext {
         },
     }
 
-    return ctx;
+    trap_return();
 }
 
 pub export fn trap_return() noreturn {
@@ -125,15 +123,16 @@ pub export fn trap_return() noreturn {
     const restore_va = @intFromPtr(&__restore) - @intFromPtr(&__alltraps) + config.TRAMPOLINE;
     asm volatile (
         \\ fence.i
-        \\ jr %[trap_ctx_ptr]
+        \\ jr %[restore_va]
         ::
         [restore_va] "{a0}" (restore_va),
         [user_satp] "{a1}" (user_satp),
         [trap_ctx_ptr] "r" (trap_ctx_ptr),
         : "memory"
     );
+    panic.panic("trap return return!", .{});
 }
 
 pub export fn trap_from_kernel() noreturn {
-    panic.panic("a trap from kernel!");
+    panic.panic("a trap from kernel!", .{});
 }

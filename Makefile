@@ -42,7 +42,7 @@ run: build
 	qemu-system-riscv64 $(QEMU_RUN_ARGS)
 
 run-debug: build-debug
-	qemu-system-riscv64 $(QEMU_RUN_ARGS) $(QEMU_DEBUG_ARGS)
+	qemu-system-riscv64 $(QEMU_RUN_ARGS)
 
 # using gdb to remote debug zcore os
 # set a breakpoint at 0x80200000 by default
@@ -53,6 +53,9 @@ debug: build-debug
 	-ex 'set arch riscv:rv64' \
 	-ex 'target remote $(REMOTE)' \
 	-ex 'b *$(START_ADDR)'
+
+debug-vscode: build-debug
+	qemu-system-riscv64 $(QEMU_RUN_ARGS) $(QEMU_DEBUG_ARGS)
 
 # clean cache and output files
 clean:

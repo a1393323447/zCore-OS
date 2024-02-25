@@ -104,14 +104,14 @@ pub const PhysPageNum = struct {
         return Self { .v = v & ( (1 << PPN_WIDTH_SV39) - 1 ) };
     }
 
-    pub fn from_addr(va: VirtAddr) Self {
-        assert.assert_eq(va.page_offset(), 0, @src());
-        va.floor();
+    pub fn from_addr(pa: PhysAddr) Self {
+        assert.assert_eq(pa.page_offset(), 0, @src());
+        return pa.floor();
     }
 
     pub fn mem_area_to(self: *const Self, comptime T: type) [*]T {
         const pa = PhysAddr.from_ppn(self.*);
-        return @ptrFromInt(pa);
+        return @ptrFromInt(pa.v);
     } 
 
     pub fn get_pte_array(self: *const Self) []PageTableEntry {
@@ -159,10 +159,12 @@ pub const VirtPageNum = struct {
     pub fn indexes(self: *const Self) [3]usize {
         var vpn = self.v;
         var idx = [3]usize {0, 0, 0};
-        var i = 0;
-        while (i >= 0) {
+        var i: usize = 2;
+        while (true) {
             idx[i] = vpn & 511;
             vpn >>= 9;
+            if (i == 0) break;
+            i -= 1;
         }
 
         return idx;

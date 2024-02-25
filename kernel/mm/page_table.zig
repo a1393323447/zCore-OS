@@ -1,6 +1,7 @@
 const std = @import("std");
 const addr =  @import("address.zig");
 const assert = @import("../assert.zig");
+const console = @import("../console.zig");
 const panic = @import("../panic.zig");
 const frame_allocator = @import("frame_allocator.zig");
 
@@ -30,14 +31,16 @@ pub const PTEFlags = struct {
         return Self { .bits = bits };
     }
 
-    pub fn set(self: *Self, flag: PTEFlag) Self {
-        self.* = self.* | @intFromEnum(flag);
-        return self.*;
+    pub fn set(self: Self, flag: PTEFlag) Self {
+        return .{ .bits = self.bits | @intFromEnum(flag) };
     }
 
-    pub fn unset(self: *Self, flag: PTEFlag) Self {
-        self.* = self.* & ~@intFromEnum(flag);
-        return self.*;
+    pub fn unset(self: Self, flag: PTEFlag) Self {
+        return .{ .bits =  self.bits & ~@intFromEnum(flag) };
+    }
+
+    pub fn is_set(self: *const Self, flag: PTEFlag) bool {
+        return (self.bits & @intFromEnum(flag)) != 0;
     }
 };
 
@@ -59,7 +62,7 @@ pub const PageTableEntry = extern struct {
     }
 
     pub fn ppn(self: *const Self) addr.PhysPageNum {
-        const v = (self.bits >> 10 & ((@as(1, usize) << 44) - 1));
+        const v = (self.bits >> 10 & ((@as(usize, 1) << 44) - 1));
         return addr.PhysPageNum.from(v);
     }
 
@@ -69,19 +72,19 @@ pub const PageTableEntry = extern struct {
     }
 
     pub fn is_valid(self: *const Self) bool {
-        return (self.flags() & PTEFlag.V) != PTEFlags.empty();
+        return self.flags().is_set(PTEFlag.V);
     }
 
     pub fn is_readable(self: *const Self) bool {
-        return (self.flags() & PTEFlag.R) != PTEFlags.empty();
+        return self.flags().is_set(PTEFlag.R);
     }
 
     pub fn is_writable(self: *const Self) bool {
-        return (self.flags() & PTEFlag.W) != PTEFlags.empty();
+        return self.flags().is_set(PTEFlag.W);
     }
 
     pub fn is_executable(self: *const Self) bool {
-        return (self.flags() & PTEFlag.X) != PTEFlags.empty();
+        return self.flags().is_set(PTEFlag.X);
     }
 };
 
@@ -91,8 +94,8 @@ pub const PageTable = struct {
 
     const Self = @This();
     pub fn init(allocator: std.mem.Allocator) Self {
-        const frame = frame_allocator.frame_alloc().?;
-        const frames = ArrayList(FrameTracker).init(allocator);
+        const frame = frame_allocator.frame_alloc() orelse panic.panic("no more mem", .{});
+        var frames = ArrayList(FrameTracker).init(allocator);
         frames.append(frame) catch unreachable;
         return Self {
             .root_ppn = frame.ppn,
@@ -119,8 +122,8 @@ pub const PageTable = struct {
                 break;
             }
             if (!pte.is_valid()) {
-                const frame = frame_allocator.frame_alloc().?;
-                pte.* = PageTableEntry.new(frame.ppn, PTEFlag.V);
+                const frame = frame_allocator.frame_alloc() orelse panic.panic("no more mem", .{});
+                pte.* = PageTableEntry.new(frame.ppn, PTEFlags.empty().set(PTEFlag.V));
                 self.frames.append(frame) catch unreachable;
             }
             ppn = pte.ppn();
@@ -148,15 +151,18 @@ pub const PageTable = struct {
         return result;
     }
 
-    pub fn map(self: *Self, vpn: addr.VirtPageNum, ppn: addr.PhysPageNum, flags: PTEFlags) void {
+    pub fn map(self: *Self, vpn: addr.VirtPageNum, ppn: addr.PhysPageNum, flags: PTEFlags) !void {
         const pte = self.find_pte_create(vpn).?;
-        assert.assert(!pte.is_valid(), "vpn {} is mapped before mapping", vpn);
+        if (pte.is_valid()) {
+            console.logger.warn("0x{x} is already mapped to 0x{x}.", .{vpn.v, pte.ppn().v});
+            return error.Remapping;
+        }
         pte.* = PageTableEntry.new(ppn, flags.set(PTEFlag.V));
     }
 
     pub fn unmap(self: *Self, vpn: addr.VirtPageNum) void {
         const pte = self.find_pte_create(vpn).?;
-        assert.assert(pte.is_valid(), "vpn {} is invalid before unmapping", vpn);
+        assert.assert(pte.is_valid(), "vpn 0x{x} is invalid before unmapping", vpn);
         pte.* = PageTableEntry.empty();
     }
 
