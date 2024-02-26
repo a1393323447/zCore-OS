@@ -47,6 +47,7 @@ pub fn syscall(syscall_id: usize, args: [3]usize) isize {
         SYSCALL_YIELD => process.sys_yield(),
         SYSCALL_GET_TIME => process.sys_get_time(),
         SYSCALL_MMAP => process.sys_mmap(args[0], args[1], args[2]),
+        SYSCALL_MUNMAP => process.sys_munmap(args[0], args[1]),
         else => {
             panic.panic("Unsupported syscall_id: {d}", .{syscall_id});
         },

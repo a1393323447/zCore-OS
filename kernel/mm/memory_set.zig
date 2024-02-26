@@ -107,6 +107,10 @@ pub const MapArea = struct {
         };
     }
 
+    pub fn contains(self: *Self, va: addr.VirtAddr) bool {
+        return self.vpn_range.contains(va.floor());
+    }
+
     pub fn map_one(self: *Self, page_table: *PageTable, vpn: addr.VirtPageNum) !void {
         var ppn: addr.PhysPageNum = undefined;
         switch (self.map_type) {
@@ -132,8 +136,10 @@ pub const MapArea = struct {
     pub fn unmap_one(self: *Self, page_table: *PageTable, vpn: addr.VirtPageNum) void {
         switch (self.map_type) {
             .Framed => {
-                const kv_pair = self.data_frames.fetchRemove(vpn) catch |e| panic.panic("Failed to remove frame due to {}", .{e});
-                kv_pair.?.value.deinit();
+                const kv_pair = self.data_frames.fetchRemove(vpn)
+                    catch |e| panic.panic("Failed to unmap 0x{x} due to {}", .{vpn.v, e})
+                    orelse return;
+                kv_pair.value.deinit();
             },
             else => {}
         }
@@ -217,6 +223,30 @@ pub const MemorySet = struct {
             mut_map_area.copy_data(&self.page_table, d);
         }
         self.areas.append(mut_map_area) catch unreachable;
+    }
+
+    pub fn remove(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr) !void {
+        const end_vpn = end_va.ceil();
+        const len = self.areas.items.len;
+        for (0..len) |i| {
+            if (self.areas.items[i].contains(start_va)) {
+                const area = &self.areas.items[i];
+                var unmap_area: MapArea = undefined;
+                if (end_vpn.v == area.vpn_range.r.v) {
+                    unmap_area = self.areas.orderedRemove(i);
+                } else if (end_vpn.v > area.vpn_range.r.v) {
+                    return error.InvalidMemArea;
+                } else {
+                    unmap_area = area.*;
+                    unmap_area.vpn_range.r = end_vpn;
+                    area.vpn_range.l = end_vpn;
+                }
+                console.logger.debug("munmap 0x{x} -> 0x{x}", .{ unmap_area.vpn_range.l.v, unmap_area.vpn_range.r.v });
+                unmap_area.unmap(&self.page_table);
+                return;
+            }
+        }
+        return error.MemAreaNotFound;
     }
 
     fn map_trampoline(self: *Self) void {

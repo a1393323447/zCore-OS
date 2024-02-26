@@ -111,7 +111,17 @@ pub const TaskMananger = struct {
     fn current_task_mmap(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr, perms: MapPermissions) !void {
         MANAGER_LOCK.acquire();
         defer MANAGER_LOCK.release();
-        try self.tasks.items[self.cur_task].mem_set.insert_framed_area(start_va, end_va, perms);
+        try self.tasks.items[self.cur_task]
+            .mem_set
+            .insert_framed_area(start_va, end_va, perms);
+    }
+
+    fn current_task_munmap(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr) !void {
+        MANAGER_LOCK.acquire();
+        defer MANAGER_LOCK.release();
+        try self.tasks.items[self.cur_task]
+            .mem_set
+            .remove(start_va, end_va);
     }
 };
 
@@ -193,9 +203,15 @@ pub fn current_task_mmap(start: usize, end: usize, pert: usize) !void {
     try TASK_MANAGER.current_task_mmap(start_va, end_va, permissions);
 }
 
+pub fn current_task_munmap(start: usize, end: usize) !void {
+    const start_va = addr.VirtAddr.from(start);
+    const end_va = addr.VirtAddr.from(end);
+    try TASK_MANAGER.current_task_munmap(start_va, end_va);
+}
+
 pub fn check_addr(p: usize) void {
     const cur = &TASK_MANAGER.tasks.items[TASK_MANAGER.cur_task];
-    const pte = cur.mem_set.translate(addr.VirtPageNum.from_addr(addr.VirtAddr.from(p)));
+    const pte = cur.mem_set.translate(addr.VirtAddr.from(p).floor());
     if (pte) |pp| {
         console.logger.debug("pte for 0x{x} r:{}, w:{}, x:{}, v:{}", .{
             p,

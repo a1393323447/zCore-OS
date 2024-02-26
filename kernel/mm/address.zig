@@ -105,7 +105,6 @@ pub const PhysPageNum = struct {
     }
 
     pub fn from_addr(pa: PhysAddr) Self {
-        assert.assert_eq(pa.page_offset(), 0, @src());
         return pa.floor();
     }
 
@@ -210,6 +209,10 @@ pub fn SimpleRange(comptime T: type) type {
                 return null;
             }
         } 
+
+        pub fn contains(self: *const Self, v: T) bool {
+            return self.l.v <= v.v and v.v < self.r.v;
+        }
     };
 }
 

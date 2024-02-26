@@ -53,3 +53,7 @@ pub fn sys_get_time() isize {
 pub fn sys_mmap(start: usize, len: usize, prot: usize) isize {
     return syscall(SYSCALL_MMAP, [_]usize{start, len, prot});
 }
+
+pub fn sys_munmap(start: usize, len: usize) isize {
+    return syscall(SYSCALL_MUNMAP, [_]usize{start, len, 0});
+}
