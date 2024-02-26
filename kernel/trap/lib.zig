@@ -86,6 +86,7 @@ pub export fn trap_handler() noreturn {
                 ctx.x[10] = @intCast(code);
             },
             .StoreFault, .StorePageFault => {
+                task.check_addr(stval);
                 console.logger.warn("[kernel] PageFault in application, bad memory addr = 0x{x}, bad instruction addr = 0x{x}, core dumped.", .{ stval, ctx.sepc });
                 task.exit_current_and_run_next();
             },

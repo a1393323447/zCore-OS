@@ -7,9 +7,14 @@ const console = @import("../console.zig");
 const timer = @import("../timer.zig");
 const task = @import("task.zig");
 const trap = @import("../trap/lib.zig");
+const mm = @import("../mm/lib.zig");
+const addr = mm.address;
 
 const SpinLock = @import("shared").lock.SpinLock;
 const ArrayList = std.ArrayList;
+
+const MapPermission = mm.memory_set.MapPermission;
+const MapPermissions = mm.memory_set.MapPermissions;
 
 const TaskContext = @import("context.zig").TaskContext;
 const TaskStatus = task.TaskStatus;
@@ -102,6 +107,12 @@ pub const TaskMananger = struct {
             riscv.sbi.shutdown();
         }
     }
+
+    fn current_task_mmap(self: *Self, start_va: addr.VirtAddr, end_va: addr.VirtAddr, perms: MapPermissions) !void {
+        MANAGER_LOCK.acquire();
+        defer MANAGER_LOCK.release();
+        try self.tasks.items[self.cur_task].mem_set.insert_framed_area(start_va, end_va, perms);
+    }
 };
 
 var TASK_MANAGER: TaskMananger = undefined;
@@ -164,4 +175,36 @@ pub fn current_user_token() usize {
 
 pub fn current_trap_ctx() *trap.TrapContext {
     return TASK_MANAGER.get_current_trap_ctx();
+}
+
+pub fn current_task_mmap(start: usize, end: usize, pert: usize) !void {
+    const start_va = addr.VirtAddr.from(start);
+    const end_va = addr.VirtAddr.from(end);
+    var permissions = MapPermissions.empty().set(MapPermission.U);
+    if (pert & (1 << 0) != 0) {
+        permissions = permissions.set(MapPermission.R);
+    }
+    if (pert & (1 << 1) != 0) {
+        permissions = permissions.set(MapPermission.W);
+    }
+    if (pert & (1 << 2) != 0) {
+        permissions = permissions.set(MapPermission.X);
+    }
+    try TASK_MANAGER.current_task_mmap(start_va, end_va, permissions);
+}
+
+pub fn check_addr(p: usize) void {
+    const cur = &TASK_MANAGER.tasks.items[TASK_MANAGER.cur_task];
+    const pte = cur.mem_set.translate(addr.VirtPageNum.from_addr(addr.VirtAddr.from(p)));
+    if (pte) |pp| {
+        console.logger.debug("pte for 0x{x} r:{}, w:{}, x:{}, v:{}", .{
+            p,
+            pp.is_readable(),
+            pp.is_writable(),
+            pp.is_executable(),
+            pp.is_valid(),
+        });
+    } else {
+        console.logger.debug("pte for 0x{x} is null", .{p});
+    }
 }
