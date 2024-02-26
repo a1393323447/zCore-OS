@@ -4,6 +4,7 @@ const panic = @import("panic.zig");
 const trap = @import("trap/lib.zig");
 const task = @import("task/lib.zig");
 const timer = @import("timer.zig");
+const mm = @import("mm/lib.zig");
 
 export fn _kmain() noreturn {
     clear_bss();
@@ -11,13 +12,16 @@ export fn _kmain() noreturn {
     print_logo();
 
     trap.init();
-    task.init();
 
-    loader.load_apps();
+    mm.init();
+    mm.remap_test();
+
+    task.init(mm.heap_allocator.allocator);
+
     trap.enable_timer_interrupt();
     task.run_first_task();
 
-    panic.panic("Unreachable in _kmain!", .{});
+    panic.panic("Unreachable in _kmain!\n", .{});
 }
 
 fn print_logo() void {
@@ -29,6 +33,7 @@ fn print_logo() void {
         \\     //'/'___ \ \ \L\ \/\ \L\ \ \ \//\  __//\______\\ \ \_\ \/\ \L\ \ 
         \\     /\_______\\ \____/\ \____/\ \_\\ \____\/______/ \ \_____\ `\____\
         \\     \/_______/ \/___/  \/___/  \/_/ \/____/          \/_____/\/_____/
+        \\
     ;
     console.logger.print(console.Color.Green.dye(logo ++ "\n"), .{});
 }

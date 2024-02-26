@@ -1,5 +1,10 @@
 //! RISC-V registers
 
+fn bits_from(v: anytype, comptime start: usize, comptime end: usize) @TypeOf(v) {
+    const TOTAL_BITS = @bitSizeOf(@TypeOf(v));
+    return (v << (TOTAL_BITS - end)) >> (TOTAL_BITS - end + start - 1);
+}
+
 /// hart (core) id registers
 pub const mhartid = struct {
     pub inline fn read() usize {
@@ -313,6 +318,61 @@ pub const scause = struct {
                 15 => Exception.StorePageFault,
                 else => Exception.Unknown,
             };
+        }
+    };
+};
+
+pub const satp = struct {
+    pub const Mode = enum(u8) {
+        Bare = 0,
+        Sv39 = 8,
+        Sv48 = 9,
+        Sv57 = 10,
+        Sv64 = 11,
+    };
+
+    pub inline fn write(bits: usize) void {
+        asm volatile (
+            \\ csrw satp, %[bits]
+            :
+            : [bits] "r" (bits),
+        );
+    }
+
+    pub const Satp = struct {
+        bits: usize,
+
+        const Self = @This();
+        pub inline fn read() Self {
+            var bits: usize = asm (
+                \\ csrr %[ret], satp
+                : [ret] "=r" (-> usize),
+            );
+
+            return Satp { .bits = bits };
+        }
+
+        pub inline fn write_to(self: Self) void {
+            write(self.bits);
+        }
+
+        pub fn mode(self: Self) Mode {
+            return switch (bits_from(self.bits, 60, 64)) {
+                0 => Mode.Bare,
+                8 => Mode.Sv39,
+                9 => Mode.Sv48,
+                10 => Mode.Sv57,
+                11 => Mode.Sv64,
+                else => unreachable,
+            };
+        }
+
+        pub fn asid(self: Self) usize {
+            return bits_from(self.bits, 44, 60);
+        }
+
+        pub fn ppn(self: Self) usize {
+            return bits_from(self.bits, 0, 44);
         }
     };
 };

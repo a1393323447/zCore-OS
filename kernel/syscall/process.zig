@@ -20,3 +20,15 @@ pub fn sys_yield() isize {
 pub fn sys_get_time() isize {
     return @intCast(timer.get_time_ms());
 }
+
+pub fn sys_mmap(start: usize, len: usize, prot: usize) isize {
+    if (len == 0 or len % 4096 != 0) return -1;
+    task.current_task_mmap(start, start + len, prot) catch return -1;
+    return 0;
+}
+
+pub fn sys_munmap(start: usize, len: usize) isize {
+    if (len == 0 or len % 4096 != 0) return -1;
+    task.current_task_munmap(start, start + len) catch return -1;
+    return 0;
+}

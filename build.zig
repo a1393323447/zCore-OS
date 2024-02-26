@@ -151,8 +151,11 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) 
 
     b.installArtifact(user_app);
 
+    const emit_elf_step = emit_elf(b, user_app, app_name);
     // emit bin file
     const emit_bin_file_step = emit_bin(b, user_app, format("{s}.bin", .{app_name}));
+
+    emit_bin_file_step.dependOn(emit_elf_step);
 
     return emit_bin_file_step;
 }
@@ -189,4 +192,9 @@ fn emit_bin(b: *std.build.Builder, source_exe: *CompileStep, install_name: []con
     });
     const copy_to_bin = b.addInstallBinFile(objcopy.getOutputSource(), install_name);
     return &copy_to_bin.step;
+}
+
+fn emit_elf(b: *std.build.Builder, source_exe: *CompileStep, install_name: []const u8) *Step {
+    const copy_to_elf = b.addInstallFile(source_exe.getEmittedBin(), install_name);
+    return &copy_to_elf.step;
 }
