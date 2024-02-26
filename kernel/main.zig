@@ -11,10 +11,11 @@ export fn _kmain() noreturn {
 
     print_logo();
 
+    trap.init();
+
     mm.init();
     mm.remap_test();
 
-    trap.init();
     task.init(mm.heap_allocator.allocator);
 
     trap.enable_timer_interrupt();

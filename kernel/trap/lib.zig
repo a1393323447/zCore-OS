@@ -125,14 +125,16 @@ pub export fn trap_return() noreturn {
         \\ fence.i
         \\ jr %[restore_va]
         ::
-        [restore_va] "{a0}" (restore_va),
+        [trap_ctx_ptr] "{a0}" (trap_ctx_ptr),
         [user_satp] "{a1}" (user_satp),
-        [trap_ctx_ptr] "r" (trap_ctx_ptr),
+        [restore_va] "r" (restore_va),
         : "memory"
     );
     panic.panic("trap return return!", .{});
 }
 
 pub export fn trap_from_kernel() noreturn {
+    const scause = regs.scause.read();
+    console.logger.err("trap: {}", .{scause.cause()});
     panic.panic("a trap from kernel!", .{});
 }

@@ -68,7 +68,7 @@ pub const TaskControlBlock = struct {
             @intFromPtr(&trap.trap_handler),
         );
 
-        console.logger.debug("entry 0x{x}", .{elf_mem_info.entry_point});
+        console.logger.debug("entry 0x{x} sp 0x{x}", .{elf_mem_info.entry_point, trap_ctx.x[2]});
 
         return task_control_block;
     }

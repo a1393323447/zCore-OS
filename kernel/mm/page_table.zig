@@ -180,7 +180,7 @@ pub const PageTable = struct {
 
 };
 
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize, allocator: std.mem.Allocator) ArrayList([]u8) {
+pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize, allocator: std.mem.Allocator) !ArrayList([]u8) {
     const page_table = PageTable.from_token(token, allocator);
     var start = @intFromPtr(ptr);
     const end = start + len;
@@ -191,11 +191,11 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize, allocato
         const ppn = page_table.translate(vpn).?.ppn();
         vpn.step();
         var end_va = addr.VirtAddr.from_vpn(vpn);
-        end_va = @min(end_va.v, addr.VirtAddr.from(end).v);
+        end_va = addr.VirtAddr { .v = @min(end_va.v, addr.VirtAddr.from(end).v) };
         if (end_va.page_offset() == 0) {
-            v.append(&ppn.get_bytes_array()[start_va.page_offset()..]);
+            try v.append(ppn.get_bytes_array()[start_va.page_offset()..]);
         } else {
-            v.append(&ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+            try v.append(ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
         }
         start = end_va.v;
     }
