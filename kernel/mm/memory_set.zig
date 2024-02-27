@@ -19,7 +19,7 @@ const PageTableEntry = ptable.PageTableEntry;
 const FrameTracker = frame_allocator.FrameTracker;
 
 var KERNEL_SPACE_LOCK = shared.lock.SpinLock.init();
-pub var KERNEL_SPACE: MemorySet = undefined;
+var KERNEL_SPACE: MemorySet = undefined;
 
 pub fn init_kernel_space(allocator: std.mem.Allocator) void {
     KERNEL_SPACE = MemorySet.new_kernel(allocator);
@@ -30,6 +30,12 @@ pub fn kernel_space_insert_framed_area(start_va: addr.VirtAddr, end_va: addr.Vir
     KERNEL_SPACE_LOCK.acquire();
     defer KERNEL_SPACE_LOCK.release();
     try KERNEL_SPACE.insert_framed_area(start_va, end_va, permissions);
+}
+
+pub fn kernel_space_remove_area_with_start_vpn(start_vpn: addr.VirtPageNum) void {
+    KERNEL_SPACE_LOCK.acquire();
+    defer KERNEL_SPACE_LOCK.release();
+    KERNEL_SPACE.remove_area_with_start_vpn(start_vpn);
 }
 
 pub fn kernel_space_token() usize {
@@ -104,6 +110,23 @@ pub const MapArea = struct {
             .data_frames = MemMap.init(allocator),
             .map_type = map_type,
             .map_perm = map_perm,
+        };
+    }
+
+    pub fn deinit(self: *Self) !void {
+        var iter = try self.data_frames.iteratorInit();
+        while (try iter.next()) |kv_pair| {
+            kv_pair.value.deinit();
+        }
+        try self.data_frames.deinit();
+    }
+
+    pub fn from_another(another: *const MapArea, allocator: std.mem.Allocator) Self {
+        return Self {
+            .vpn_range = another.vpn_range,
+            .data_frames = MemMap.init(allocator),
+            .map_type = another.map_type,
+            .map_perm = another.map_perm,
         };
     }
 
@@ -241,12 +264,22 @@ pub const MemorySet = struct {
                     unmap_area.vpn_range.r = end_vpn;
                     area.vpn_range.l = end_vpn;
                 }
-                console.logger.debug("munmap 0x{x} -> 0x{x}", .{ unmap_area.vpn_range.l.v, unmap_area.vpn_range.r.v });
                 unmap_area.unmap(&self.page_table);
                 return;
             }
         }
         return error.MemAreaNotFound;
+    }
+
+    pub fn remove_area_with_start_vpn(self: *const Self, start_vpn: addr.VirtPageNum) void {
+        const len = self.areas.items.len;
+        for (0..len) |i| {
+            if (self.areas.items[i].vpn_range.l.v == start_vpn.v) {
+                var unmap_area: MapArea = self.areas.orderedRemove(i);
+                unmap_area.unmap(&self.page_table);
+                return;
+            }
+        }
     }
 
     fn map_trampoline(self: *Self) void {
@@ -266,6 +299,16 @@ pub const MemorySet = struct {
     pub fn translate(self: *const Self, vpn: addr.VirtPageNum) ?PageTableEntry {
         return self.page_table.translate(vpn);
     }
+
+    pub fn recycle_data_pages(self: *Self) void {
+        for (0..self.areas.items.len) |i| {
+            self.areas.items[i].deinit() catch |e| {
+                console.logger.warn("Failed to free mapArea due to {}", .{e});
+                return;
+            };
+        }
+        self.areas.items.len = 0;
+    } 
 
     pub fn new_kernel(allocator: std.mem.Allocator) Self {
         var memory_set = Self.new_bare(allocator);
@@ -401,6 +444,23 @@ pub const MemorySet = struct {
         };
     }
 
+    pub fn from_existed_user(user_space: *MemorySet, allocator: std.mem.Allocator) !MemorySet {
+        var mem_set = Self.new_bare(allocator);
+        mem_set.map_trampoline();
+        // copy data sections/trap_context/user_stack
+        for (user_space.areas.items) |*area| {
+            const new_area = MapArea.from_another(area, allocator);
+            try mem_set.push(new_area, null);
+            // copy data from another space
+            var vpn_range = area.vpn_range;
+            while (vpn_range.next()) |vpn| {
+                const src_ppn = user_space.translate(vpn).?.ppn();
+                const dst_ppn = mem_set.translate(vpn).?.ppn();
+                @memcpy(dst_ppn.get_bytes_array(), src_ppn.get_bytes_array());
+            }
+        }
+        return mem_set;
+    }
 };
 
 pub fn remap_test() void {

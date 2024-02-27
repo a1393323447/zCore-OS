@@ -87,6 +87,10 @@
                 {
                     "description": "Set a default breakpoint at 0x80200000",
                     "text": "b *0x80200000",
+                },
+                {
+                    "description": "Set a default breakpoint at 0x80200000",
+                    "text": "add-symbol-file ${workspaceFolder}/zig-out/user_shell",
                 }
             ]
         },

@@ -123,6 +123,7 @@ fn set_build_user_app(b: *std.build.Builder, shared: *Module) void {
     }
 }
 
+// TODO: change bin_main to executable and user_app to obj, then set default_panic in bin_main
 fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) *Step {
     const asm_files = [_][]const u8{};
 

@@ -51,6 +51,10 @@ pub const PhysAddr = struct {
     pub fn gt(lhs: Self, rhs: Self) bool {
         return lhs.v > rhs.v;
     }
+
+    pub fn get_mut(self: *const Self, comptime T: type) *T {
+        return @ptrFromInt(self.v);
+    }
 };
 
 pub const VirtAddr = struct {
@@ -111,7 +115,7 @@ pub const PhysPageNum = struct {
     pub fn mem_area_to(self: *const Self, comptime T: type) [*]T {
         const pa = PhysAddr.from_ppn(self.*);
         return @ptrFromInt(pa.v);
-    } 
+    }
 
     pub fn get_pte_array(self: *const Self) []PageTableEntry {
         return self.mem_area_to(PageTableEntry)[0..512];

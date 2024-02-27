@@ -1,10 +1,12 @@
 const std = @import("std");
+const shared = @import("shared");
 const addr =  @import("address.zig");
 const assert = @import("../assert.zig");
 const console = @import("../console.zig");
 const panic = @import("../panic.zig");
 const frame_allocator = @import("frame_allocator.zig");
 
+const String = shared.utils.String;
 const ArrayList = std.ArrayList;
 const FrameTracker = frame_allocator.FrameTracker;
 
@@ -103,11 +105,25 @@ pub const PageTable = struct {
         };
     }
 
+    pub fn deinit(self: *const Self) void {
+        for (self.frames.items) |frame| {
+            frame.deinit();
+        }
+        self.frames.deinit();
+    }
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize, allocator: std.mem.Allocator) Self {
         return Self {
             .root_ppn = addr.PhysPageNum.from(satp & ((@as(usize, 1) << 44) - 1)),
             .frames = ArrayList(FrameTracker).init(allocator),
+        };
+    }
+
+    pub fn from_token_noalloc(satp: usize) Self {
+        return Self {
+            .root_ppn = addr.PhysPageNum.from(satp & ((@as(usize, 1) << 44) - 1)),
+            .frames = undefined,
         };
     }
 
@@ -174,14 +190,22 @@ pub const PageTable = struct {
         }
     }
 
+    pub fn translate_va(self: *const Self, va: addr.VirtAddr) ?addr.PhysAddr {
+        const pte = self.find_pte(va.floor()) orelse return null;
+        const aligned_pa = addr.PhysAddr.from_ppn(pte.ppn());
+        const offset = va.page_offset();
+        return addr.PhysAddr.from(aligned_pa.v + offset);
+    }
+
     pub fn token(self: *const Self) usize {
         return @as(usize, 8) << 60 | self.root_ppn.v;
     }
 
 };
 
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize, allocator: std.mem.Allocator) !ArrayList([]u8) {
-    const page_table = PageTable.from_token(token, allocator);
+pub fn translated_byte_buffer(token: usize, ptr: [*]const u8, len: usize, allocator: std.mem.Allocator) !ArrayList([]u8) {
+    const page_table = PageTable.from_token_noalloc(token);
+
     var start = @intFromPtr(ptr);
     const end = start + len;
     var v = ArrayList([]u8).init(allocator);
@@ -203,4 +227,34 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize, allocato
     return v;
 }
 
-// ELF std.io.FixedBufferStream
+pub fn translated_str(token: usize, ptr: [*]const u8, allocator: std.mem.Allocator) !String {
+    const page_table = PageTable.from_token_noalloc(token);
+
+    var va = @intFromPtr(ptr);
+    var str = String.init(allocator);
+    while (true) {
+        const ch = page_table
+            .translate_va(addr.VirtAddr.from(va))
+            .?
+            .get_mut(u8)
+            .*;
+        if (ch == 0) {
+            break;
+        } else {
+            try str.concat(&[_]u8{ ch });
+            va += 1;
+        }
+    }
+    return str;
+}
+
+pub fn translate_mut(
+    token: usize, 
+    comptime T: type,
+    ptr: *const T,
+) *T {
+    const page_table = PageTable.from_token_noalloc(token);
+
+    const va = @intFromPtr(ptr);
+    return page_table.translate_va(addr.VirtAddr.from(va)).?.get_mut(T);
+}

@@ -1,10 +1,20 @@
+const std = @import("std");
 const console = @import("console.zig");
 const loader = @import("loader.zig");
-const panic = @import("panic.zig");
+const inner_panic = @import("panic.zig");
 const trap = @import("trap/lib.zig");
 const task = @import("task/lib.zig");
 const timer = @import("timer.zig");
 const mm = @import("mm/lib.zig");
+
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    _ = ret_addr;
+    if (error_return_trace) |trace| {
+        inner_panic.panic("panic: {s} {}", .{msg, trace.*});
+    } else {
+        inner_panic.panic("panic: {s}", .{msg});
+    }
+}
 
 export fn _kmain() noreturn {
     clear_bss();
@@ -16,12 +26,14 @@ export fn _kmain() noreturn {
     mm.init();
     mm.remap_test();
 
+    loader.init(mm.heap_allocator.allocator);
     task.init(mm.heap_allocator.allocator);
 
     trap.enable_timer_interrupt();
-    task.run_first_task();
+    timer.set_next_trigger();
+    task.run_tasks();
 
-    panic.panic("Unreachable in _kmain!\n", .{});
+    inner_panic.panic("Unreachable in _kmain!\n", .{});
 }
 
 fn print_logo() void {
@@ -39,7 +51,6 @@ fn print_logo() void {
 }
 
 fn clear_bss() void {
-    const std = @import("std");
     const ExternOptions = std.builtin.ExternOptions;
 
     const sbss_ptr: [*]u8 = @extern([*]u8, ExternOptions{ .name = "sbss" });
