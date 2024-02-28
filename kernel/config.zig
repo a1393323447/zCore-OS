@@ -7,7 +7,7 @@ pub const MAX_APP_NUM: usize = 4;
 pub const APP_BASE_ADDRESS: usize = 0x80400000;
 pub const APP_SIZE_LIMIT: usize = 0x20000;
 
-pub const MEMORY_END: usize = 0x80f00000;
+pub const MEMORY_END: usize = 0x88000000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 pub const CLOCK_FREQ: usize = 12500000;

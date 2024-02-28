@@ -40,6 +40,13 @@ pub const TaskControlBlock = struct {
 
     const Self = @This();
 
+    pub fn deinit(self: *Self) void {
+        self.pid.deinit();
+        self.kernel_stack.deinit();
+        self.mem_set.deinit();
+        self.children.deinit();
+    }
+
     pub fn is_zombie(self: *const Self) bool {
         return self.status == .Zombie;
     }
@@ -103,6 +110,7 @@ pub const TaskControlBlock = struct {
             .?
             .ppn();
         // substitute memory_set
+        self.mem_set.deinit();
         self.mem_set = mem_set;
         // update trap_ctx ppn
         self.trap_ctx_ppn = trap_ctx_ppn;

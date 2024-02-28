@@ -1,6 +1,7 @@
 const std = @import("std");
 const shared = @import("shared");
 const assert = @import("../assert.zig");
+const console = @import("../console.zig");
 const config = @import("../config.zig");
 const panic = @import("../panic.zig");
 const mm = @import("../mm/lib.zig");
@@ -59,7 +60,7 @@ const PidAllocator = struct {
                 .{pid}
             );
         }
-        self.recycled.append(pid);
+        self.recycled.append(pid) catch unreachable;
     }
 
     pub fn deinit(self: *const Self) void {
@@ -69,6 +70,10 @@ const PidAllocator = struct {
 
 var PID_ALLOC_LOCK = SpinLock.init();
 var PID_ALLOCATOR: PidAllocator = undefined;
+
+pub fn init(allocator: std.mem.Allocator) void {
+    PID_ALLOCATOR = PidAllocator.init(allocator);
+}
 
 pub fn pid_alloc() PidHandle {
     PID_ALLOC_LOCK.acquire();

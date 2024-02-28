@@ -7,7 +7,6 @@ const mm = @import("../mm/lib.zig");
 
 /// task exits and submit an exit code
 pub fn sys_exit(exit_code: i32) noreturn {
-    console.logger.info("[kernel] Application exited with code {d}", .{exit_code});
     task.exit_current_and_run_next(exit_code);
     panic.panic("Unreachale in sys_exit!", .{});
 }
@@ -50,13 +49,13 @@ pub fn sys_exec(path: [*]const u8) isize {
             catch |e| panic.panic("sys_exec failed: {}", .{e});
         return 0;
     } else {
-        return -0xef;
+        return -1;
     }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_waitpid(pid: isize, exit_code_ptr: *i32) isize {
+pub fn sys_waitpid(pid: isize, exit_code_ptr: *allowzero i32) isize {
     const upid: usize = @bitCast(pid);
     const cur_task = task.current_task().?;
     // find a child process
@@ -64,25 +63,37 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *i32) isize {
     for (cur_task.children.items, 0..) |child, i| {
         if (child.getpid() == upid or pid == -1) {
             child_idx = i;
+            break;
         }
     }
 
     if (child_idx) |idx| {
-        const child_task = cur_task.children.items[idx];
+        var child_task = cur_task.children.items[idx];
         if (!child_task.is_zombie()) {
             return -2;
         }
-        _ = cur_task.children.orderedRemove(idx);
-        // TODO: free child task
-        const found_pid = child_task.getpid();
+        child_task = cur_task.children.orderedRemove(idx);
         const exit_code = child_task.exit_code;
-        const ptr = mm.page_table.translate_mut(child_task.get_user_token(), i32, exit_code_ptr);
-        ptr.* = exit_code;
+        const found_pid = child_task.getpid();
+        child_task.deinit();
+        // now child task finished
+        // we need to set the exit code to exit_code_ptr passed by parent task which is *CURRENT* task
+        const trans_res = mm.page_table.translated_mut(cur_task.get_user_token(), i32, exit_code_ptr);
+        if (trans_res) |ptr| {
+            ptr.* = exit_code;
+        } else {
+            // exit_code_ptr pass by current task is invalid
+            // we need to kill this task
+            console.logger.warn(
+                "[kernel] PageFault in application, bad memory addr = 0x{x}, bad instruction addr = 0x{x}, core dumped.", 
+                .{ exit_code_ptr, cur_task.get_trap_ctx().sepc
+            });
+            task.exit_current_and_run_next(-1);
+        }
         return @bitCast(found_pid);
     } else {
         return -1;
     }
-
 }
 
 /// get time in milliseconds

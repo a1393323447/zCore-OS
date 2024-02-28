@@ -43,10 +43,11 @@ pub inline fn sys_write(fd: usize, buf: []const u8) isize {
     return syscall(SYSCALL_WRITE, args);
 }
 
-pub inline fn sys_exit(exit_code: i32) isize {
+pub inline fn sys_exit(exit_code: i32) noreturn {
     const exit_code_usize: usize = @bitCast(@as(isize, @intCast(exit_code)));
     const args = [3]usize{ exit_code_usize, 0, 0 };
-    return syscall(SYSCALL_EXIT, args);
+    _ = syscall(SYSCALL_EXIT, args);
+    unreachable;
 }
 
 pub inline fn sys_yield() isize {

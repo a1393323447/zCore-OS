@@ -18,6 +18,10 @@ pub fn yield() isize {
     return syscall.sys_yield();
 }
 
+pub fn exit(code: i32) noreturn {
+    syscall.sys_exit(code);
+}
+
 pub fn fork() isize {
     return syscall.sys_fork();
 }

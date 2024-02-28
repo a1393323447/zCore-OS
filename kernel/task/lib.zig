@@ -20,6 +20,7 @@ pub const check_addr = processor.check_addr;
 pub const run_tasks = processor.run_tasks;
 
 pub fn init(allocator: std.mem.Allocator) void {
+    pid.init(allocator);
     manager.init(allocator);
     init_initproc(allocator) 
         catch |e| panic.panic("Failed to init initproc due to {}", .{e});

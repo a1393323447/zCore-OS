@@ -225,6 +225,16 @@ pub const MemorySet = struct {
         };
     }
 
+    pub fn deinit(self: *Self) void {
+        for (self.areas.items) |*item| {
+            item.deinit() catch |e| {
+                panic.panic("Failed to release mem area due to {}", .{e});
+            };
+        }
+        self.areas.deinit();
+        self.page_table.deinit();
+    }
+
     pub fn token(self: *const Self) usize {
         return self.page_table.token();
     }
@@ -271,7 +281,7 @@ pub const MemorySet = struct {
         return error.MemAreaNotFound;
     }
 
-    pub fn remove_area_with_start_vpn(self: *const Self, start_vpn: addr.VirtPageNum) void {
+    pub fn remove_area_with_start_vpn(self: *Self, start_vpn: addr.VirtPageNum) void {
         const len = self.areas.items.len;
         for (0..len) |i| {
             if (self.areas.items[i].vpn_range.l.v == start_vpn.v) {
@@ -404,7 +414,6 @@ pub const MemorySet = struct {
                     map_perm,
                     allocator,
                 );
-                console.logger.debug("map 0x{x} -> 0x{x}", .{start_va.v, end_va.v});
 
                 const offset: usize = @intCast(prog_hd.p_offset);
                 const filesz: usize = @intCast(prog_hd.p_filesz);
@@ -428,7 +437,6 @@ pub const MemorySet = struct {
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W).set(MapPermission.U),
             allocator,
         ), null) catch panic.panic("Failed to map user stack", .{});
-        console.logger.debug("ustack 0x{x} -> 0x{x}", .{user_stack_bottom, user_stack_top});
         // map TrapContext
         mem_set.push(MapArea.new(
             addr.VirtAddr.from(config.TRAP_CONTEXT),
@@ -444,7 +452,7 @@ pub const MemorySet = struct {
         };
     }
 
-    pub fn from_existed_user(user_space: *MemorySet, allocator: std.mem.Allocator) !MemorySet {
+    pub fn from_existed_user(user_space: *const MemorySet, allocator: std.mem.Allocator) !MemorySet {
         var mem_set = Self.new_bare(allocator);
         mem_set.map_trampoline();
         // copy data sections/trap_context/user_stack

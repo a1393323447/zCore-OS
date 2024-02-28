@@ -192,6 +192,10 @@ pub const PageTable = struct {
 
     pub fn translate_va(self: *const Self, va: addr.VirtAddr) ?addr.PhysAddr {
         const pte = self.find_pte(va.floor()) orelse return null;
+        if (!pte.is_valid()) {
+            console.logger.warn("va 0x{x} is not vaild", .{va.v});
+            return null;
+        }
         const aligned_pa = addr.PhysAddr.from_ppn(pte.ppn());
         const offset = va.page_offset();
         return addr.PhysAddr.from(aligned_pa.v + offset);
@@ -248,13 +252,14 @@ pub fn translated_str(token: usize, ptr: [*]const u8, allocator: std.mem.Allocat
     return str;
 }
 
-pub fn translate_mut(
+pub fn translated_mut(
     token: usize, 
     comptime T: type,
-    ptr: *const T,
-) *T {
+    ptr: *allowzero const T,
+) ?*T {
     const page_table = PageTable.from_token_noalloc(token);
 
     const va = @intFromPtr(ptr);
-    return page_table.translate_va(addr.VirtAddr.from(va)).?.get_mut(T);
+    const pa = page_table.translate_va(addr.VirtAddr.from(va)) orelse return null;
+    return pa.get_mut(T);
 }

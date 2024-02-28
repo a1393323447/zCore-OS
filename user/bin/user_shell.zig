@@ -13,29 +13,6 @@ var HEAP_SPACE: [1024]u8 =
 var FIXED_BUF_ALLOC = std.heap.FixedBufferAllocator.init(&HEAP_SPACE);
 const allocator = FIXED_BUF_ALLOC.allocator();
 
-fn exec_cmd(path: []const u8) !i32 {
-    const pid = process.fork();
-    if (pid == 0) {
-        // child process
-        const status = process.exec(path);
-        if (status == -1) {
-            return error.ExecFailed;
-        } else if (status == -0xef) {
-            return error.NotSuchExe;
-        } else {
-            unreachable;
-        }
-    } else {
-        var exit_code: i32 = 0;
-        const exit_pid = process.waitpid(@bitCast(pid), &exit_code);
-        if (pid != exit_pid) {
-            return error.UnexpectedPid;
-        } else {
-            return exit_code;
-        }
-    }
-}
-
 export fn main() callconv(.C) i32 {
     console.stdout.print(">> ", .{});
     var line = shared.utils.String.init(allocator);
@@ -50,24 +27,26 @@ export fn main() callconv(.C) i32 {
                         return -1;
                     };
 
-                    const exit_code = exec_cmd(line.str()) catch |e| switch (e) {
-                        error.ExecFailed => return -4,
-                        error.NotSuchExe => {
-                            console.stdout.err("Shell: not exe name {s}", .{line.str()});
-                            line.clear();
-                            console.stdout.print(">> ", .{});
-                            continue;
-                        },
-                        error.UnexpectedPid => {
-                            console.stdout.err("Shell: {}", .{e});
+                    const pid = process.fork();
+                    if (pid == 0) {
+                        // child process
+                        if (process.exec(line.str()) == -1) {
+                            console.stdout.err("Shell: command not found: {s}", .{line.str()});
                             return -4;
+                        } else {
+                            console.stdout.err("unreachable in shell", .{});
+                            unreachable;
                         }
-                    };
-
-                    console.stdout.info(
-                        "Shell: process {s} exited with code {d}",
-                        .{ line.str(), exit_code },
-                    );
+                    } else {
+                        var exit_code: i32 = 0;
+                        const exit_pid = process.waitpid(@bitCast(pid), &exit_code);
+                        if (exit_pid != pid) {
+                            console.stdout.err("Shell: Unexpected pid {d}, expected {d}", .{exit_pid, pid});
+                            unreachable;
+                        } else {
+                            console.stdout.info("Shell: {s} exited with code {d}", .{line.str(), exit_code});
+                        }
+                    }
 
                     line.clear();
                 }
