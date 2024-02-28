@@ -2,7 +2,7 @@
     .section .data
     .global _num_app
 _num_app:
-    .quad 9
+    .quad 11
     .quad app_0_start
     .quad app_1_start
     .quad app_2_start
@@ -12,7 +12,9 @@ _num_app:
     .quad app_6_start
     .quad app_7_start
     .quad app_8_start
-    .quad app_8_end
+    .quad app_9_start
+    .quad app_10_start
+    .quad app_10_end
 
 .global _app_names
 _app_names:
@@ -24,6 +26,8 @@ _app_names:
     .string "power_5"
     .string "power_7"
     .string "sleep"
+    .string "spawn_0"
+    .string "test_getpid"
     .string "user_shell"
 
 .section .data
@@ -86,5 +90,19 @@ app_7_end:
     .global app_8_start
     .global app_8_end
 app_8_start:
-    .incbin "zig-out/user_shell"
+    .incbin "zig-out/spawn_0"
 app_8_end:
+
+.section .data
+    .global app_9_start
+    .global app_9_end
+app_9_start:
+    .incbin "zig-out/test_getpid"
+app_9_end:
+
+.section .data
+    .global app_10_start
+    .global app_10_end
+app_10_start:
+    .incbin "zig-out/user_shell"
+app_10_end:

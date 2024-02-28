@@ -70,6 +70,10 @@ pub fn sys_exec(path: []const u8) isize {
     return syscall(SYSCALL_EXEC, [_]usize{@intFromPtr(path.ptr), 0, 0});
 }
 
+pub fn sys_spawn(path: []const u8) isize {
+    return syscall(SYSCALL_SPAWN, [_]usize{@intFromPtr(path.ptr), 0, 0});
+}
+
 pub fn sys_waitpid(pid: isize, xstatus: *i32) isize {
     const args = [3]usize{ @bitCast(pid), @intFromPtr(xstatus), 0 };
     return syscall(SYSCALL_WAITPID, args);

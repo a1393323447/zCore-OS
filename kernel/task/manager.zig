@@ -35,14 +35,14 @@ var TASK_MANAGER: TaskManager = undefined;
 
 pub fn init(allocator: std.mem.Allocator) void {
     TASK_MANAGER = TaskManager.init(allocator)
-        catch |e| panic.panic("Failed to init task manager due to {}", .{e});
+        catch |e| panic.panic("Failed to init task manager: {}", .{e});
 }
 
 pub fn add_task(task: *TaskControlBlock) void {
     MANAGER_LOCK.acquire();
     defer MANAGER_LOCK.release();
     TASK_MANAGER.add(task) 
-        catch |e| panic.panic("Failed to add task due to {}", .{e});
+        catch |e| panic.panic("Failed to add task: {}", .{e});
 }
 
 pub fn fetch_task() ?*TaskControlBlock {

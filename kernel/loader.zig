@@ -56,6 +56,6 @@ pub fn list_apps() void {
 }
 
 pub fn init(allocator: std.mem.Allocator) void {
-    init_app_name(allocator) catch |e| panic.panic("Failed to init load due to {}", .{e});
+    init_app_name(allocator) catch |e| panic.panic("Failed to init load: {}", .{e});
     list_apps();
 }

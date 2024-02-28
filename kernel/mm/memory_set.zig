@@ -160,7 +160,7 @@ pub const MapArea = struct {
         switch (self.map_type) {
             .Framed => {
                 const kv_pair = self.data_frames.fetchRemove(vpn)
-                    catch |e| panic.panic("Failed to unmap 0x{x} due to {}", .{vpn.v, e})
+                    catch |e| panic.panic("Failed to unmap 0x{x}: {}", .{vpn.v, e})
                     orelse return;
                 kv_pair.value.deinit();
             },
@@ -228,7 +228,7 @@ pub const MemorySet = struct {
     pub fn deinit(self: *Self) void {
         for (self.areas.items) |*item| {
             item.deinit() catch |e| {
-                panic.panic("Failed to release mem area due to {}", .{e});
+                panic.panic("Failed to release mem area: {}", .{e});
             };
         }
         self.areas.deinit();
@@ -313,7 +313,7 @@ pub const MemorySet = struct {
     pub fn recycle_data_pages(self: *Self) void {
         for (0..self.areas.items.len) |i| {
             self.areas.items[i].deinit() catch |e| {
-                console.logger.warn("Failed to free mapArea due to {}", .{e});
+                console.logger.warn("Failed to free mapArea: {}", .{e});
                 return;
             };
         }
@@ -382,7 +382,7 @@ pub const MemorySet = struct {
         mem_set.map_trampoline();
 
         var elf_buf = std.io.fixedBufferStream(elf_data);
-        const header = std.elf.Header.read(&elf_buf) catch |e| panic.panic("Faield to parse elf due to {}", .{e});
+        const header = std.elf.Header.read(&elf_buf) catch |e| panic.panic("Faield to parse elf: {}", .{e});
         var prog_header_iter = header.program_header_iterator(elf_buf);
 
         const PROG_TYPE_LOAD: u32 = 1;

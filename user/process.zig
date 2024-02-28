@@ -30,6 +30,10 @@ pub fn exec(path: []const u8) isize {
     return syscall.sys_exec(path);
 }
 
+pub fn spawn(path: []const u8) isize {
+    return syscall.sys_spawn(path);
+}
+
 pub fn waitpid(pid: usize, exit_code: *i32) isize {
     while (true) {
         switch (syscall.sys_waitpid(@bitCast(pid), exit_code)) {

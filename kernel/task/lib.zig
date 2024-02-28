@@ -23,7 +23,7 @@ pub fn init(allocator: std.mem.Allocator) void {
     pid.init(allocator);
     manager.init(allocator);
     init_initproc(allocator) 
-        catch |e| panic.panic("Failed to init initproc due to {}", .{e});
+        catch |e| panic.panic("Failed to init initproc: {}", .{e});
     add_initproc();
 }
 
@@ -47,7 +47,7 @@ pub fn exit_current_and_run_next(exit_code: i32) void {
     for (task.children.items) |child| {
         child.parent = INITPROC;
         INITPROC.children.append(child)
-            catch |e| panic.panic("Failed to recycle child process due to {}", .{e});
+            catch |e| panic.panic("Failed to recycle child process: {}", .{e});
     }
 
     task.children.items.len = 0;
@@ -66,6 +66,15 @@ pub fn init_initproc(allocator: std.mem.Allocator) !void {
         allocator,
         loader.get_app_data_by_name("initproc") orelse return error.InitProcNotFound
     );
+}
+
+pub fn create_task(path: []const u8, allocator: std.mem.Allocator) !*TaskControlBlock {
+    const new_task = try allocator.create(TaskControlBlock);
+    new_task.* = try TaskControlBlock.new(
+        allocator,
+        loader.get_app_data_by_name(path) orelse return error.ProcNotFound
+    );
+    return new_task;
 }
 
 pub fn add_initproc() void {

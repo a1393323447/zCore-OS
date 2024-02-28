@@ -5,7 +5,7 @@ const console = @import("../console.zig");
 
 export fn main() callconv(.C) i32 {
     if (process.fork() == 0) {
-        _ = process.exec("user_shell" ++ [_]u8{0});
+        _ = process.exec("user_shell\x00");
     } else {
         while (true) {
             var exit_code: i32 = 0;

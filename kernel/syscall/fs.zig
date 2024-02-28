@@ -19,7 +19,7 @@ pub fn sys_write(fd: usize, ptr: [*]const u8, len: usize) isize {
                 ptr, 
                 len, 
                 mm.heap_allocator.allocator
-            ) catch |e| panic.panic("Failed to translate buffer due to {}", .{e});
+            ) catch |e| panic.panic("Failed to translate buffer: {}", .{e});
             defer bufs.deinit();
             for (bufs.items) |buf| {
                 console.logger.print("{s}", .{buf});
@@ -51,7 +51,7 @@ pub fn sys_read(fd: usize, buf: [*]const u8, len: usize) isize {
                 buf,
                 len, 
                 mm.heap_allocator.allocator,
-            ) catch |e| panic.panic("Failed to translate buffer due to {}", .{e});
+            ) catch |e| panic.panic("Failed to translate buffer: {}", .{e});
             defer buffers.deinit();
             buffers.items[0][0] = ch;
             return 1;

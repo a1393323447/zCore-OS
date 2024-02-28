@@ -49,6 +49,7 @@ pub fn syscall(syscall_id: usize, args: [3]usize) isize {
         SYSCALL_GET_PID => process.sys_getpid(),
         SYSCALL_FORK => process.sys_fork(),
         SYSCALL_EXEC => process.sys_exec(@ptrFromInt(args[0])),
+        SYSCALL_SPAWN => process.sys_spawn(@ptrFromInt(args[0])),
         SYSCALL_WAITPID => process.sys_waitpid(@bitCast(args[0]), @ptrFromInt(args[1])),
         SYSCALL_GET_TIME => process.sys_get_time(),
         SYSCALL_MMAP => process.sys_mmap(args[0], args[1], args[2]),

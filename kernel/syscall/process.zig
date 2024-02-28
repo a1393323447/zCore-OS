@@ -4,6 +4,7 @@ const panic = @import("../panic.zig");
 const loader = @import("../loader.zig");
 const console = @import("../console.zig");
 const mm = @import("../mm/lib.zig");
+const manager = @import("../task/manager.zig");
 
 /// task exits and submit an exit code
 pub fn sys_exit(exit_code: i32) noreturn {
@@ -38,11 +39,13 @@ pub fn sys_fork() isize {
 
 pub fn sys_exec(path: [*]const u8) isize {
     const token = task.current_user_token();
-    const tpath = mm.page_table.translated_str(
+    var tpath = mm.page_table.translated_str(
         token,
         path,
         mm.heap_allocator.allocator
-    ) catch |e| panic.panic("Failed to translate str due to {}", .{e});
+    ) catch |e| panic.panic("Failed to translate str: {}", .{e});
+    defer tpath.deinit();
+    
     if (loader.get_app_data_by_name(tpath.str())) |data| {
         const cur_task = task.current_task().?;
         cur_task.exec(data)
@@ -51,6 +54,29 @@ pub fn sys_exec(path: [*]const u8) isize {
     } else {
         return -1;
     }
+}
+
+pub fn sys_spawn(path: [*]const u8) isize {
+    const token = task.current_user_token();
+    var tpath = mm.page_table.translated_str(
+        token,
+        path,
+        mm.heap_allocator.allocator
+    ) catch |e| panic.panic("Failed to translate str: {}", .{e});
+    defer tpath.deinit();
+    
+    const cur_task = task.current_task().?;
+    const new_task = task.create_task(
+        tpath.str(),
+        mm.heap_allocator.allocator
+    ) catch |e| switch (e) {
+        error.ProcNotFound => return -1,
+        else => panic.panic("Failed to exec {s}: {}", .{tpath.str(), e}),
+    };
+    new_task.parent = cur_task;
+    cur_task.children.append(new_task) catch |e| panic.panic("Faield to add child to parent: {}", .{e});
+    manager.add_task(new_task);
+    return @bitCast(new_task.pid.v);
 }
 
 /// If there is not a child process whose pid is same as given, return -1.
@@ -76,6 +102,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *allowzero i32) isize {
         const exit_code = child_task.exit_code;
         const found_pid = child_task.getpid();
         child_task.deinit();
+        mm.heap_allocator.allocator.destroy(child_task);
         // now child task finished
         // we need to set the exit code to exit_code_ptr passed by parent task which is *CURRENT* task
         const trans_res = mm.page_table.translated_mut(cur_task.get_user_token(), i32, exit_code_ptr);

@@ -116,7 +116,7 @@ pub const KernelStack = struct {
             addr.VirtAddr.from(kernel_stack.bottom),
             addr.VirtAddr.from(kernel_stack.top),
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
-        ) catch |e| panic.panic("Failed to map kernel stack due to {}", .{e});
+        ) catch |e| panic.panic("Failed to map kernel stack: {}", .{e});
         return Self {
             .pid = pid,
         };
