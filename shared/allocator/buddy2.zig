@@ -11,8 +11,6 @@ pub const Log2Size = math.Log2Int(usize);
 
 pub const Check = std.heap.Check;
 
-// Thread-safety
-
 pub const Buddy2Allocator = struct {
     const Self = @This();
 

@@ -14,7 +14,6 @@ pub const TaskContext = struct {
     }
 
     pub fn goto_trap_return(ksp: usize) Self {
-        console.logger.debug("set ksp 0x{x}", .{ksp});
         return Self {
             .ra = @intFromPtr(&trap.trap_return),
             .sp = ksp,

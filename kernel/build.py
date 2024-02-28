@@ -8,6 +8,7 @@ link_app_content = []
 
 apps = os.listdir('user/bin')
 apps.sort()
+apps = [app[:app.find('.')] for app in apps]
 
 link_app_content.append(
 r""".align 3
@@ -22,6 +23,15 @@ for id in range(len(apps)):
     link_app_content.append("    .quad app_{}_start\n".format(id))
 link_app_content.append("    .quad app_{}_end\n".format(len(apps) - 1))
 
+link_app_content.append(
+r"""
+.global _app_names
+_app_names:
+"""
+)
+for app in apps:
+    link_app_content.append(f'    .string "{app}"\n')
+
 link_app_data = r"""
 .section .data
     .global app_{0}_start
@@ -33,7 +43,6 @@ app_{0}_end:
 
 app_id = 0
 for app in apps:
-    app = app[:app.find('.')]
     link_app_content.append(link_app_data.format(app_id, app))
     app_id = app_id + 1
 

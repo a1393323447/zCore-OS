@@ -2,6 +2,7 @@ const config = @import("../config.zig");
 const console = @import("../console.zig");
 const panic = @import("../panic.zig");
 const task = @import("../task/lib.zig");
+const timer = @import("../timer.zig");
 const loader = @import("../loader.zig");
 const riscv = @import("../riscv/lib.zig");
 const regs = riscv.regs;
@@ -72,7 +73,7 @@ pub const TrapContext = extern struct {
 
 pub export fn trap_handler() noreturn {
     set_kernel_trap_entry();
-    const ctx = task.current_trap_ctx();
+    var ctx = task.current_trap_ctx();
     const scause = regs.scause.read();
     const stval = regs.stval.read();
 
@@ -81,18 +82,23 @@ pub export fn trap_handler() noreturn {
     switch (scause.cause()) {
         .exception => |exception| switch (exception) {
             .UserEnvCall => {
+                // jump to next instruction anyway
                 ctx.sepc += 4;
                 const code = sys.syscall(ctx.x[17], [_]usize{ ctx.x[10], ctx.x[11], ctx.x[12] });
-                ctx.x[10] = @intCast(code);
+                // cx is changed during sys_exec, so we have to call it again
+                ctx = task.current_trap_ctx();
+                ctx.x[10] = @bitCast(code);
             },
-            .StoreFault, .StorePageFault => {
+            .LoadFault, .LoadPageFault,
+            .StoreFault, .StorePageFault,
+            .InstructionFault, .InstructionPageFault => {
                 task.check_addr(stval);
                 console.logger.warn("[kernel] PageFault in application, bad memory addr = 0x{x}, bad instruction addr = 0x{x}, core dumped.", .{ stval, ctx.sepc });
-                task.exit_current_and_run_next();
+                task.exit_current_and_run_next(-2);
             },
             .IllegalInstruction => {
                 console.logger.warn("[kernel] IllegalInstruction in application, kernel killed it.", .{});
-                task.exit_current_and_run_next();
+                task.exit_current_and_run_next(-3);
             },
             else => {
                 panic.panic("Unsupported trap {}, stval = {x} !", .{
@@ -103,6 +109,7 @@ pub export fn trap_handler() noreturn {
         },
         .interrupt => |interrupt| switch (interrupt) {
             .SupervisorTimer => {
+                timer.set_next_trigger();
                 task.suspend_current_and_run_next();
             },
             else => {
@@ -135,7 +142,5 @@ pub export fn trap_return() noreturn {
 }
 
 pub export fn trap_from_kernel() noreturn {
-    const scause = regs.scause.read();
-    console.logger.err("trap: {}", .{scause.cause()});
     panic.panic("a trap from kernel!", .{});
 }
