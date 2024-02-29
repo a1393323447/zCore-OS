@@ -14,13 +14,20 @@ BIOS_PATH = boot/rustsbi-qemu.bin
 BIN_PATH = zig-out/bin
 EXE = zcore-os
 IMG = $(EXE).bin
+FS_IMG = fs.img
 
 # kernel loaded adderss
 START_ADDR = 0x80200000
 
 QEMU_RUN_ARGS = -machine virt -bios $(BIOS_PATH) -nographic
 QEMU_RUN_ARGS += -device loader,file=$(BIN_PATH)/$(IMG),addr=$(START_ADDR)
+QEMU_RUN_ARGS += -drive file=$(BIN_PATH)/$(FS_IMG),if=none,format=raw,id=x0
+QEMU_RUN_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMU_RUN_ARGS += -global virtio-mmio.force-legacy=false
 QEMU_DEBUG_ARGS = -s -S
+
+img:
+	dd if=/dev/zero of=$(BIN_PATH)/$(FS_IMG) bs=1M count=1
 
 # check .zig file syntax
 check:
@@ -38,15 +45,15 @@ build-debug:
 	$(PYTHON) kernel/build.py debug
 
 # run zcore os in qemu
-run: build
+run: build img
 	qemu-system-riscv64 $(QEMU_RUN_ARGS)
 
-run-debug: build-debug
+run-debug: build-debug img
 	qemu-system-riscv64 $(QEMU_RUN_ARGS)
 
 # using gdb to remote debug zcore os
 # set a breakpoint at 0x80200000 by default
-debug: build-debug
+debug: build-debug img
 	qemu-system-riscv64 $(QEMU_RUN_ARGS) $(QEMU_DEBUG_ARGS) &
 	$(GDB) \
 	-ex 'file $(BIN_PATH)/$(EXE)' \
@@ -54,7 +61,7 @@ debug: build-debug
 	-ex 'target remote $(REMOTE)' \
 	-ex 'b *$(START_ADDR)'
 
-debug-vscode: build-debug
+debug-vscode: build-debug img
 	qemu-system-riscv64 $(QEMU_RUN_ARGS) $(QEMU_DEBUG_ARGS)
 
 # clean cache and output files

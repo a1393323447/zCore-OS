@@ -6,6 +6,7 @@ const trap = @import("trap/lib.zig");
 const task = @import("task/lib.zig");
 const timer = @import("timer.zig");
 const mm = @import("mm/lib.zig");
+const fs = @import("fs/lib.zig");
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     _ = ret_addr;
@@ -22,6 +23,8 @@ export fn _kmain() noreturn {
     print_logo();
 
     trap.init();
+
+    fs.init_disck();
 
     mm.init();
     mm.remap_test();
