@@ -107,8 +107,10 @@ pub const TaskControlBlock = struct {
             }
         } else if (lhs_is_waiting) {
             return std.math.Order.gt;
-        } else {
+        } else if (rhs_is_waiting) {
             return std.math.Order.lt;
+        } else {
+            return std.math.order(lhs.elapsed, rhs.elapsed);
         }
     }
 
