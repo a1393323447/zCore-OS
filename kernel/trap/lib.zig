@@ -66,7 +66,6 @@ pub const TrapContext = extern struct {
         };
 
         ctx.set_sp(sp);
-        console.logger.info("set usp 0x{x}", .{sp});
         return ctx;
     }
 };
