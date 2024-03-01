@@ -2,6 +2,7 @@ const std = @import("std");
 const panic = @import("../panic.zig");
 const loader = @import("../loader.zig");
 const console = @import("../console.zig");
+const riscv = @import("../riscv/lib.zig");
 const trap = @import("../trap/lib.zig");
 const pid = @import("pid.zig");
 const processor = @import("processor.zig");
@@ -44,6 +45,11 @@ pub fn exit_current_and_run_next(exit_code: i32) void {
     const task = take_current_task().?;
     task.status = .Zombie;
     task.exit_code = exit_code;
+
+    if (task.pid.v == 0) {
+        console.logger.info("[Kernel] shutdown", .{});
+        riscv.sbi.shutdown();
+    }
 
     for (task.children.items) |child| {
         child.parent = INITPROC;

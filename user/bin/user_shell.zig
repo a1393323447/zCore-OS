@@ -22,6 +22,10 @@ export fn main() callconv(.C) i32 {
             LF, CR => {
                 console.stdout.print("\n", .{});
                 if (!line.isEmpty()) {
+                    if (line.cmp("shutdown")) {
+                        return 0;
+                    }
+
                     line.concat(&[_]u8{0}) catch |e| {
                         console.stdout.err("err: {}", .{e});
                         return -1;
