@@ -52,6 +52,18 @@ pub fn wait(exit_code: *i32) isize {
     }
 }
 
+pub fn wait_debug(exit_code: *i32, yield_cnt: *usize) isize {
+    while (true) {
+        switch (syscall.sys_waitpid(-1, exit_code)) {
+            -2 => {
+                yield_cnt.* += 1;
+                _ = syscall.sys_yield();
+            },
+            else => |n| return n,
+        }
+    }
+}
+
 pub fn mmap(start: usize, len: usize, prot: usize) isize {
     return syscall.sys_mmap(start, len, prot);
 }
