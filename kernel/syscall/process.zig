@@ -96,6 +96,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *allowzero i32) isize {
     if (child_idx) |idx| {
         var child_task = cur_task.children.items[idx];
         if (!child_task.is_zombie()) {
+            cur_task.wait_for(child_task);
             return -2;
         }
         child_task = cur_task.children.orderedRemove(idx);
@@ -117,6 +118,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *allowzero i32) isize {
             });
             task.exit_current_and_run_next(-1);
         }
+        cur_task.stop_waiting();
         return @bitCast(found_pid);
     } else {
         return -1;

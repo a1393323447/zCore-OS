@@ -4,6 +4,7 @@ const mm = @import("../mm/lib.zig");
 const addr = mm.address;
 const manager = @import("manager.zig");
 const trap = @import("../trap/lib.zig");
+const timer = @import("../timer.zig");
 
 const TaskContext = @import("context.zig").TaskContext;
 const TaskStatus = @import("task.zig").TaskStatus;
@@ -59,6 +60,7 @@ pub fn run_tasks() void {
             const idle_task_ctx_ptr = &PROCESSOR.idle_task_ctx;
             const next_ctx_ptr = &task.ctx;
             task.status = TaskStatus.Running;
+            task.get_scheduled();
             PROCESSOR.current = task;
             __switch(idle_task_ctx_ptr, next_ctx_ptr);
         }

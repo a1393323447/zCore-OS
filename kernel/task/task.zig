@@ -1,9 +1,11 @@
 const std = @import("std");
 const mm = @import("../mm/lib.zig");
 const addr = mm.address;
+const assert = @import("../assert.zig");
 const config = @import("../config.zig");
 const console = @import("../console.zig");
 const trap = @import("../trap/lib.zig");
+const timer = @import("../timer.zig");
 const panic = @import("../panic.zig");
 const pid = @import("pid.zig");
 
@@ -27,6 +29,8 @@ pub const TaskControlBlock = struct {
     const Children = ArrayList(*TaskControlBlock);
 
     pid: pid.PidHandle,
+    last_schedule: usize,
+    elapsed: usize,
     kernel_stack: pid.KernelStack,
     base_size: usize,
     ctx: TaskContext,
@@ -35,6 +39,7 @@ pub const TaskControlBlock = struct {
     mem_set: MemSet,
     parent: ?*TaskControlBlock,
     children: Children,
+    waiting: ?*TaskControlBlock, // 表明当前任务正在等待另一个任务结束
     exit_code: i32,
     allocator: std.mem.Allocator,
 
@@ -45,6 +50,66 @@ pub const TaskControlBlock = struct {
         self.kernel_stack.deinit();
         self.mem_set.deinit();
         self.children.deinit();
+    }
+
+    pub fn wait_for(self: *Self, task: *Self) void {
+        if (
+            self.is_waiting() and 
+            self.waiting.?.pid.v != task.pid.v
+        ) {
+            panic.panic(
+                "task({d}) is waiting for {d} but still try to wait {d}", 
+            .{ self.pid.v, self.waiting.?.pid.v, task.pid.v }
+            );
+        }
+        self.waiting = task;
+    }
+
+    pub fn stop_waiting(self: *Self) void {
+        self.waiting = null;
+    }
+
+    pub fn is_waiting(self: *Self) bool {
+        return self.waiting != null;
+    }
+
+    pub fn get_scheduled(self: *Self) void {
+        self.last_schedule = timer.get_time();
+    }
+
+    pub fn end_scheduled(self: *Self) void {
+        if (self.last_schedule != 0) {
+            self.elapsed += timer.get_time() - self.last_schedule;
+        }
+    }
+
+    pub fn is_wait_for(self: *const Self, task: *const Self) bool {
+        var pwait = self.waiting;
+        while (pwait) |wait| {
+            if (wait.pid.v == task.pid.v) {
+                return true;
+            }
+            pwait = wait.waiting;
+        }
+        return false;
+    }
+
+    pub fn cmp(_: void, lhs: *Self, rhs: *Self) std.math.Order {
+        const lhs_is_waiting = lhs.is_waiting();
+        const rhs_is_waiting = rhs.is_waiting();
+        if (lhs_is_waiting and rhs_is_waiting) {
+            if (lhs.is_wait_for(rhs)) {
+                return std.math.Order.gt;
+            } else if (rhs.is_wait_for(lhs)) {
+                return std.math.Order.lt;
+            } else {
+                return std.math.order(lhs.elapsed, rhs.elapsed);
+            }
+        } else if (lhs_is_waiting) {
+            return std.math.Order.gt;
+        } else {
+            return std.math.Order.lt;
+        }
     }
 
     pub fn is_zombie(self: *const Self) bool {
@@ -77,6 +142,8 @@ pub const TaskControlBlock = struct {
         // push a task context which goes to trap_return to the top of kernel stack
         const task_control_block = Self {
             .pid = pid_hd,
+            .last_schedule = 0,
+            .elapsed = 0,
             .kernel_stack = kernel_stack,
             .base_size = elf_mem_info.user_stack_top,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),
@@ -85,6 +152,7 @@ pub const TaskControlBlock = struct {
             .mem_set = mem_set,
             .parent = null,
             .children = Children.init(allocator),
+            .waiting = null,
             .exit_code = 0,
             .allocator = allocator,
         };
@@ -140,6 +208,8 @@ pub const TaskControlBlock = struct {
         const task_control_block = try self.allocator.create(Self);
         task_control_block.* = Self {
             .pid = pid_hd,
+            .last_schedule = 0,
+            .elapsed = 0,
             .kernel_stack = kernel_stack,
             .base_size = self.base_size,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),
@@ -148,6 +218,7 @@ pub const TaskControlBlock = struct {
             .mem_set = mem_set,
             .parent = self,
             .children = Children.init(self.allocator),
+            .waiting = null,
             .exit_code = 0,
             .allocator = self.allocator,
         };

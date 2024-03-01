@@ -1,4 +1,5 @@
 const std = @import("std");
+const task = @import("task.zig");
 const trap = @import("../trap/lib.zig");
 const console = @import("../console.zig");
 

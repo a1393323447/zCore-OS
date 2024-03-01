@@ -33,6 +33,7 @@ pub fn suspend_current_and_run_next() void {
     const task = take_current_task().?;
     const task_ctx_ptr = &task.ctx;
     task.status = .Ready;
+    task.end_scheduled();
 
     manager.add_task(task);
     processor.schedule(task_ctx_ptr);

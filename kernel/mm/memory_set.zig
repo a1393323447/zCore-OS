@@ -436,7 +436,7 @@ pub const MemorySet = struct {
             MapType.Framed,
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W).set(MapPermission.U),
             allocator,
-        ), null) catch panic.panic("Failed to map user stack", .{});
+        ), null) catch |e| panic.panic("Failed to map user stack: {}", .{e});
         // map TrapContext
         mem_set.push(MapArea.new(
             addr.VirtAddr.from(config.TRAP_CONTEXT),
@@ -444,7 +444,7 @@ pub const MemorySet = struct {
             MapType.Framed,
             MapPermissions.empty().set(MapPermission.R).set(MapPermission.W),
             allocator,
-        ), null) catch {};
+        ), null) catch |e| panic.panic("Failed to map trap context: {}", .{e});
         return ELFMemInfo {
             .mem_set = mem_set,
             .user_stack_top = user_stack_top,
