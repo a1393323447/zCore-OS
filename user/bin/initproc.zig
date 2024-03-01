@@ -13,6 +13,8 @@ export fn main() callconv(.C) i32 {
             if (pid == -1) {
                 _ = process.yield();
                 continue;
+            } else if (pid == 1) {
+                return 0;
             } else {
                 console.stdout.info(
                     "[initproc] Released a zombie process, pid={d}, exit_code={d}",
