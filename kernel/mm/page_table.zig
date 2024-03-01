@@ -98,7 +98,7 @@ pub const PageTable = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         const frame = frame_allocator.frame_alloc() orelse panic.panic("no more mem", .{});
         var frames = ArrayList(FrameTracker).init(allocator);
-        frames.append(frame) catch unreachable;
+        frames.append(frame) catch |e| panic.panic("Failed to recycled frame: {}", .{e});
         return Self {
             .root_ppn = frame.ppn,
             .frames = frames,
