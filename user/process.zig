@@ -22,6 +22,10 @@ pub fn exit(code: i32) noreturn {
     syscall.sys_exit(code);
 }
 
+pub fn set_priority(prio: usize) void {
+    _ = syscall.sys_set_priority(prio);
+}
+
 pub fn fork() isize {
     return syscall.sys_fork();
 }

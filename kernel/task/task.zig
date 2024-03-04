@@ -15,6 +15,9 @@ const MapPermission = mm.memory_set.MapPermission;
 const MapPermissions = mm.memory_set.MapPermissions;
 const TaskContext = @import("context.zig").TaskContext;
 
+const BIG_STRIDE: usize = 1 << 16;
+const TICKET: usize = 1 << 8;
+
 pub const TaskStatus = enum {
     UnInit,
     Ready,
@@ -30,7 +33,8 @@ pub const TaskControlBlock = struct {
 
     pid: pid.PidHandle,
     last_schedule: usize,
-    elapsed: usize,
+    pass: usize,
+    stride: usize,
     kernel_stack: pid.KernelStack,
     base_size: usize,
     ctx: TaskContext,
@@ -73,14 +77,16 @@ pub const TaskControlBlock = struct {
         return self.waiting != null;
     }
 
+    pub fn set_priority(self: *Self, prio: usize) void {
+        self.stride = BIG_STRIDE / (TICKET * prio);
+    }
+
     pub fn get_scheduled(self: *Self) void {
-        self.last_schedule = timer.get_time();
+        _ = self;
     }
 
     pub fn end_scheduled(self: *Self) void {
-        if (self.last_schedule != 0) {
-            self.elapsed += timer.get_time() - self.last_schedule;
-        }
+        self.pass += self.stride;
     }
 
     pub fn is_wait_for(self: *const Self, task: *const Self) bool {
@@ -103,14 +109,14 @@ pub const TaskControlBlock = struct {
             } else if (rhs.is_wait_for(lhs)) {
                 return std.math.Order.lt;
             } else {
-                return std.math.order(lhs.elapsed, rhs.elapsed);
+                return std.math.order(lhs.pass, rhs.pass);
             }
         } else if (lhs_is_waiting) {
             return std.math.Order.gt;
         } else if (rhs_is_waiting) {
             return std.math.Order.lt;
         } else {
-            return std.math.order(lhs.elapsed, rhs.elapsed);
+            return std.math.order(lhs.pass, rhs.pass);
         }
     }
 
@@ -144,8 +150,9 @@ pub const TaskControlBlock = struct {
         // push a task context which goes to trap_return to the top of kernel stack
         const task_control_block = Self {
             .pid = pid_hd,
+            .pass = 1 << 5,
+            .stride = BIG_STRIDE / TICKET,
             .last_schedule = 0,
-            .elapsed = 0,
             .kernel_stack = kernel_stack,
             .base_size = elf_mem_info.user_stack_top,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),
@@ -211,7 +218,8 @@ pub const TaskControlBlock = struct {
         task_control_block.* = Self {
             .pid = pid_hd,
             .last_schedule = 0,
-            .elapsed = 0,
+            .pass = 1 << 5,
+            .stride = BIG_STRIDE / TICKET,
             .kernel_stack = kernel_stack,
             .base_size = self.base_size,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),

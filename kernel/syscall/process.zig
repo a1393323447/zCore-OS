@@ -22,6 +22,12 @@ pub fn sys_getpid() isize {
     return @intCast(task.current_task().?.pid.v);
 }
 
+pub fn set_priority(prio: usize) isize {
+    const cur_task = task.current_task().?;
+    cur_task.set_priority(prio);
+    return 0;
+}
+
 pub fn sys_fork() isize {
     const cur_task = task.current_task().?;
     const new_task = cur_task.fork()

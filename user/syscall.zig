@@ -62,6 +62,10 @@ pub inline fn sys_getpid() isize {
     return syscall(SYSCALL_GET_PID, [_]usize{0, 0, 0}); 
 }
 
+pub inline fn sys_set_priority(prio: usize) isize {
+    return syscall(SYSCALL_SET_PRIORITY, [_]usize{prio, 0, 0}); 
+}
+
 pub fn sys_fork() isize {
     return syscall(SYSCALL_FORK, [_]usize{0, 0, 0});
 }

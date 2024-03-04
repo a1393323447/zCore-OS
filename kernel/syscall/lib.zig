@@ -47,6 +47,7 @@ pub fn syscall(syscall_id: usize, args: [3]usize) isize {
         SYSCALL_EXIT => process.sys_exit(@truncate(@as(isize, @bitCast(args[0])))),
         SYSCALL_YIELD => process.sys_yield(),
         SYSCALL_GET_PID => process.sys_getpid(),
+        SYSCALL_SET_PRIORITY => process.set_priority(args[0]),
         SYSCALL_FORK => process.sys_fork(),
         SYSCALL_EXEC => process.sys_exec(@ptrFromInt(args[0])),
         SYSCALL_SPAWN => process.sys_spawn(@ptrFromInt(args[0])),
