@@ -2,18 +2,17 @@ const std = @import("std");
 const shared = @import("shared");
 const panic = @import("../panic.zig");
 
-const Dequeue = shared.utils.Dequeue;
 const TaskControlBlock = @import("task.zig").TaskControlBlock;
 
 pub const TaskManager = struct {
-    const TaskQueue = Dequeue(*TaskControlBlock);
+    const TaskQueue = std.PriorityQueue(*TaskControlBlock, void, TaskControlBlock.cmp);
 
     ready_queue: TaskQueue,
 
     const Self = @This();
     pub fn init(allocator: std.mem.Allocator) !Self {
         return Self {
-            .ready_queue = try TaskQueue.init(allocator),
+            .ready_queue = TaskQueue.init(allocator, {}),
         };
     }
 
@@ -22,11 +21,11 @@ pub const TaskManager = struct {
     }
 
     pub fn add(self: *Self, task: *TaskControlBlock) !void {
-        try self.ready_queue.pushBack(task);
+        try self.ready_queue.add(task);
     }
 
     pub fn fetch(self: *Self) ?*TaskControlBlock {
-        return self.ready_queue.popFront();
+        return self.ready_queue.removeOrNull();
     }
 };
 

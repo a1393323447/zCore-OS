@@ -59,6 +59,7 @@ pub fn run_tasks() void {
             const idle_task_ctx_ptr = &PROCESSOR.idle_task_ctx;
             const next_ctx_ptr = &task.ctx;
             task.status = TaskStatus.Running;
+            task.get_scheduled();
             PROCESSOR.current = task;
             __switch(idle_task_ctx_ptr, next_ctx_ptr);
         }

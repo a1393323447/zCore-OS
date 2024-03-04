@@ -1,6 +1,7 @@
 const std = @import("std");
 const mm = @import("../mm/lib.zig");
 const addr = mm.address;
+const timer = @import("../timer.zig");
 const config = @import("../config.zig");
 const console = @import("../console.zig");
 const trap = @import("../trap/lib.zig");
@@ -27,6 +28,8 @@ pub const TaskControlBlock = struct {
     const Children = ArrayList(*TaskControlBlock);
 
     pid: pid.PidHandle,
+    last_schedule: usize,
+    elapsed: usize,
     kernel_stack: pid.KernelStack,
     base_size: usize,
     ctx: TaskContext,
@@ -63,6 +66,20 @@ pub const TaskControlBlock = struct {
         return self.pid.v;
     }
 
+    pub fn get_scheduled(self: *Self) void {
+        self.last_schedule = timer.get_time();
+    }
+
+    pub fn end_scheduled(self: *Self) void {
+        if (self.last_schedule != 0) {
+            self.elapsed += timer.get_time() - self.last_schedule;
+        }
+    }
+
+    pub fn cmp(_: void, lhs: *Self, rhs: *Self) std.math.Order {
+        return std.math.order(lhs.elapsed, rhs.elapsed);
+    }
+
     pub fn new(allocator: std.mem.Allocator, elf_data: []u8) !Self {
         const elf_mem_info = try MemSet.from_elf(allocator, elf_data);
         const mem_set = elf_mem_info.mem_set;
@@ -77,6 +94,8 @@ pub const TaskControlBlock = struct {
         // push a task context which goes to trap_return to the top of kernel stack
         const task_control_block = Self {
             .pid = pid_hd,
+            .last_schedule = 0,
+            .elapsed = 0,
             .kernel_stack = kernel_stack,
             .base_size = elf_mem_info.user_stack_top,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),
@@ -140,6 +159,8 @@ pub const TaskControlBlock = struct {
         const task_control_block = try self.allocator.create(Self);
         task_control_block.* = Self {
             .pid = pid_hd,
+            .last_schedule = 0,
+            .elapsed = 0,
             .kernel_stack = kernel_stack,
             .base_size = self.base_size,
             .ctx = TaskContext.goto_trap_return(kernel_stack_top),
