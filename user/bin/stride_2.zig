@@ -12,7 +12,7 @@ fn spin_delay() void {
 
 fn count_during(prio: usize) usize {
     const start_time = syscall.sys_get_time();
-    process.set_priority(prio);
+    _ = prio;
     var acc: usize = 0;
     while (true) {
         spin_delay();
