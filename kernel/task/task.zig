@@ -27,8 +27,6 @@ pub const TaskStatus = enum {
 };
 
 pub const TaskControlBlock = struct {
-    // 为了简单起见, 这里不用引用计数了
-    // 我们现在先让内存泄漏
     const Children = ArrayList(*TaskControlBlock);
 
     pid: pid.PidHandle,

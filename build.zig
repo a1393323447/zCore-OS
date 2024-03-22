@@ -21,12 +21,16 @@ const ObjectFormat = Target.ObjectFormat;
 const user_linker_script_path = "user/linker.ld";
 const kernel_linker_script_path = "kernel/linker.ld";
 
+const coroutine_asm_files = [_][]const u8{
+    "shared/zcoroutine/src/arch/riscv64/zcore/core.S",
+};
+
 const kernel_asm_files = [_][]const u8{
     "kernel/entry.S",
     "kernel/trap/trap.S",
     "kernel/task/switch.S",
     "kernel/link_app.S",
-};
+} ++ coroutine_asm_files;
 
 const riscv64 = CrossTarget.fromTarget(Target{
     .cpu = Cpu.baseline(Cpu.Arch.riscv64),
@@ -125,7 +129,8 @@ fn set_build_user_app(b: *std.build.Builder, shared: *Module) void {
 
 // TODO: change bin_main to executable and user_app to obj, then set default_panic in bin_main
 fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) *Step {
-    const asm_files = [_][]const u8{};
+    const user_asm_files = [_][]const u8{};
+    const bin_asm_files = [_][]const u8{} ++ coroutine_asm_files;
 
     const bin_main = b.addObject(.{
         .name = "bin_main",
@@ -134,7 +139,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) 
         .optimize = optimize(is_debug),
     });
 
-    config_compile_step(bin_main, null, &asm_files);
+    config_compile_step(bin_main, null, &bin_asm_files);
 
     bin_main.main_pkg_path = LazyPath.relative("user");
     bin_main.addModule("shared", shared);
@@ -148,7 +153,7 @@ fn build_user_app(b: *std.build.Builder, shared: *Module, app_name: []const u8) 
     user_app.addModule("shared", shared);
     user_app.addObject(bin_main);
 
-    config_compile_step(user_app, user_linker_script_path, &asm_files);
+    config_compile_step(user_app, user_linker_script_path, &user_asm_files);
 
     b.installArtifact(user_app);
 
