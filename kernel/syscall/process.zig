@@ -136,6 +136,11 @@ pub fn sys_get_time() isize {
     return @intCast(timer.get_time_ms());
 }
 
+/// get time in us
+pub fn sys_get_time_us() isize {
+    return @intCast(timer.get_time_us());
+}
+
 pub fn sys_mmap(start: usize, len: usize, prot: usize) isize {
     if (len == 0 or len % 4096 != 0) return -1;
     task.current_task_mmap(start, start + len, prot) catch return -1;

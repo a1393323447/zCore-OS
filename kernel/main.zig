@@ -16,21 +16,12 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
     }
 }
 
-const shared = @import("shared");
-const co = shared.zcoroutine;
-
 pub fn microTimestamp() i64 {
     return @intCast(timer.get_time_us());
 }
 
 pub fn sleep(t: u32) void {
     _ = t;
-}
-
-fn say_hello(id: usize) void {
-    console.logger.info("yield {d} ...", .{id});
-    co.yield();
-    console.logger.info("yield {d} return ...", .{id});
 }
 
 export fn _kmain() noreturn {
@@ -46,22 +37,9 @@ export fn _kmain() noreturn {
     loader.init(mm.heap_allocator.allocator);
     task.init(mm.heap_allocator.allocator);
 
-    co.coInit(mm.heap_allocator.allocator) catch @panic("Faield to init");
-    var arr = std.ArrayList(*const co.CoHandle(void)).init(mm.heap_allocator.allocator);
-    for (0..10) |i| {
-        const handle = co.coStart(say_hello, .{i}, co.CoConfig {
-            .stack_size = 0x1000
-        }) catch @panic("Failed to start");
-        arr.append(handle) catch @panic("Failed to append");
-    }
-
-    for (arr.items) |h| {
-        h.Await() catch @panic("Faield to await");
-    }
-
-    // trap.enable_timer_interrupt();
-    // timer.set_next_trigger();
-    // task.run_tasks();
+    trap.enable_timer_interrupt();
+    timer.set_next_trigger();
+    task.run_tasks();
 
     inner_panic.panic("Unreachable in _kmain!\n", .{});
 }

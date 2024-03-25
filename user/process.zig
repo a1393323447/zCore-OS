@@ -18,6 +18,22 @@ pub fn yield() isize {
     return syscall.sys_yield();
 }
 
+pub fn get_time() usize {
+    return @bitCast(syscall.sys_get_time());
+}
+
+pub fn get_time_us() usize {
+    return @bitCast(syscall.sys_get_time_us());
+}
+
+pub fn sleep(ms: usize) void {
+    const cur_time = get_time();
+    const wait_for = cur_time + ms;
+    while (get_time() < wait_for) {
+        _ = yield();
+    }
+}
+
 pub fn exit(code: i32) noreturn {
     syscall.sys_exit(code);
 }

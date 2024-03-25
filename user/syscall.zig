@@ -8,6 +8,7 @@ pub const SYSCALL_FSTAT: usize = 80;
 pub const SYSCALL_EXIT: usize = 93;
 pub const SYSCALL_YIELD: usize = 124;
 pub const SYSCALL_GET_TIME: usize = 169;
+pub const SYSCALL_GET_TIME_US: usize = 170;
 pub const SYSCALL_GET_PID: usize = 172;
 pub const SYSCALL_FORK: usize = 220;
 pub const SYSCALL_EXEC: usize = 221;
@@ -56,6 +57,10 @@ pub inline fn sys_yield() isize {
 
 pub inline fn sys_get_time() isize {
     return syscall(SYSCALL_GET_TIME, [_]usize{0, 0, 0});
+}
+
+pub inline fn sys_get_time_us() isize {
+    return syscall(SYSCALL_GET_TIME_US, [_]usize{0, 0, 0});
 }
 
 pub inline fn sys_getpid() isize {
